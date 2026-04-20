@@ -438,7 +438,7 @@ const MapPage = () => {
             animate={{ x: 0, y: 0 }}
             exit={isMobile ? { y: "100%", x: 0 } : { x: -320, y: 0 }}
             transition={{ type: "spring", damping: 25 }}
-            className="absolute bottom-0 left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 h-[40vh] md:h-auto bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none pb-20 md:pb-0"
+            className="absolute bottom-[75px] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 h-[45vh] md:h-auto bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none"
           >
             {/* Sidebar Header */}
             <div className="p-4 border-b border-border">
