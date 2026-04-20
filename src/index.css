@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 33% 97%;
+    --foreground: 150 25% 12%;
+
+    --card: 40 30% 95%;
+    --card-foreground: 150 25% 12%;
+
+    --popover: 40 33% 97%;
+    --popover-foreground: 150 25% 12%;
+
+    --primary: 152 45% 28%;
+    --primary-foreground: 40 33% 97%;
+
+    --secondary: 35 60% 55%;
+    --secondary-foreground: 40 33% 97%;
+
+    --muted: 40 20% 90%;
+    --muted-foreground: 150 10% 45%;
+
+    --accent: 35 80% 58%;
+    --accent-foreground: 150 25% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 33% 97%;
+
+    --border: 40 20% 88%;
+    --input: 40 20% 88%;
+    --ring: 152 45% 28%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --nav-height: 5rem;
+    --success: 152 55% 40%;
+    --warning: 35 90% 50%;
+    --info: 200 80% 50%;
+  }
+
+  .dark {
+    --background: 150 20% 8%;
+    --foreground: 40 30% 92%;
+
+    --card: 150 18% 12%;
+    --card-foreground: 40 30% 92%;
+
+    --popover: 150 20% 8%;
+    --popover-foreground: 40 30% 92%;
+
+    --primary: 152 50% 45%;
+    --primary-foreground: 150 20% 8%;
+
+    --secondary: 35 55% 50%;
+    --secondary-foreground: 150 20% 8%;
+
+    --muted: 150 15% 18%;
+    --muted-foreground: 40 15% 60%;
+
+    --accent: 35 70% 55%;
+    --accent-foreground: 150 20% 8%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 40 30% 92%;
+
+    --border: 150 12% 20%;
+    --input: 150 12% 20%;
+    --ring: 152 50% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Playfair Display', serif;
+  }
+}
