@@ -92,6 +92,14 @@ const MapPage = () => {
   const [selectedSighting, setSelectedSighting] = useState<RecentObservation | null>(null);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
 
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    handleResize(); // set initially
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Fetch bird sightings from eBird API
   const { data: sightings = [], isLoading } = useQuery({
     queryKey: ['bird-sightings', selectedRegion, userLocation],
@@ -426,11 +434,11 @@ const MapPage = () => {
       <AnimatePresence>
         {showSidebar && (
           <motion.div
-            initial={{ x: -320 }}
-            animate={{ x: 0 }}
-            exit={{ x: -320 }}
+            initial={isMobile ? { y: "100%" } : { x: -320 }}
+            animate={isMobile ? { y: 0 } : { x: 0 }}
+            exit={isMobile ? { y: "100%" } : { x: -320 }}
             transition={{ type: "spring", damping: 25 }}
-            className="absolute left-0 top-0 bottom-0 w-80 bg-card/95 backdrop-blur-lg border-r border-border z-20 flex flex-col"
+            className="absolute bottom-0 md:left-0 md:top-0 md:bottom-0 w-full md:w-80 h-[35vh] md:h-auto bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-20 flex flex-col rounded-t-2xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none"
           >
             {/* Sidebar Header */}
             <div className="p-4 border-b border-border">
