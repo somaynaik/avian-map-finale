@@ -13,6 +13,7 @@ import MapPage from "./pages/MapPage";
 import FeedPage from "./pages/FeedPage";
 import CameraPage from "./pages/CameraPage";
 import MessagesPage from "./pages/MessagesPage";
+import ChatPage from "./pages/ChatPage";
 import UsersPage from "./pages/UsersPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/feed" element={<ProtectedRoute><AppLayout><FeedPage /></AppLayout></ProtectedRoute>} />
             <Route path="/camera" element={<ProtectedRoute><CameraPage /></ProtectedRoute>} />
             <Route path="/messages" element={<ProtectedRoute><AppLayout><MessagesPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/messages/:userId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><AppLayout><UsersPage /></AppLayout></ProtectedRoute>} />
             <Route path="/users/:userId" element={<ProtectedRoute><AppLayout><UserProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>} />

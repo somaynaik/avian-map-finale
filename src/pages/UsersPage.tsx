@@ -137,7 +137,7 @@ const UsersPage = () => {
                   className="flex-1"
                   onClick={(event) => {
                     event.stopPropagation();
-                    navigate(`/messages?user=${person.id}`);
+                    navigate(`/messages/${person.id}`);
                   }}
                 >
                   <MessageCircle className="h-4 w-4" />

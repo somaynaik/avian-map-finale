@@ -123,7 +123,7 @@ const UserProfilePage = () => {
               type="button"
               variant="outline"
               className="flex-1"
-              onClick={() => navigate(`/messages?user=${profile.id}`)}
+              onClick={() => navigate(`/messages/${profile.id}`)}
             >
               <MessageCircle className="h-4 w-4" />
               Message
