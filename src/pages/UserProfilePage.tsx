@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Loader2, MessageCircle, UserPlus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -5,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FollowListDialog } from "@/components/FollowListDialog";
 import { toast } from "@/hooks/use-toast";
 import {
   followUser,
@@ -20,6 +22,7 @@ const UserProfilePage = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [followListType, setFollowListType] = useState<"followers" | "following" | null>(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["user-profile", user?.id, userId],
@@ -86,8 +89,12 @@ const UserProfilePage = () => {
 
           <div className="mt-6 grid grid-cols-3 gap-3">
             <ProfileStat label="Posts" value={profile.post_count} />
-            <ProfileStat label="Followers" value={profile.follower_count} />
-            <ProfileStat label="Following" value={profile.following_count} />
+            <button type="button" onClick={() => setFollowListType("followers")} className="transition-opacity hover:opacity-70 text-left">
+              <ProfileStat label="Followers" value={profile.follower_count} />
+            </button>
+            <button type="button" onClick={() => setFollowListType("following")} className="transition-opacity hover:opacity-70 text-left">
+              <ProfileStat label="Following" value={profile.following_count} />
+            </button>
           </div>
 
           <div className="mt-6 flex gap-2">
@@ -100,6 +107,11 @@ const UserProfilePage = () => {
             >
               {profile.is_following ? (
                 "Following"
+              ) : profile.follows_me ? (
+                <>
+                  <UserPlus className="h-4 w-4" />
+                  Follow Back
+                </>
               ) : (
                 <>
                   <UserPlus className="h-4 w-4" />
@@ -151,6 +163,13 @@ const UserProfilePage = () => {
           </CardContent>
         </Card>
       </div>
+
+      <FollowListDialog
+        isOpen={!!followListType}
+        onClose={() => setFollowListType(null)}
+        userId={profile.id}
+        type={followListType || "followers"}
+      />
     </div>
   );
 };

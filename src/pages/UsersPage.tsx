@@ -119,6 +119,11 @@ const UsersPage = () => {
                 >
                   {person.is_following ? (
                     "Following"
+                  ) : person.follows_me ? (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      Follow Back
+                    </>
                   ) : (
                     <>
                       <UserPlus className="h-4 w-4" />

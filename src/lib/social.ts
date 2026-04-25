@@ -35,6 +35,7 @@ export type UserDirectoryEntry = Profile & {
   following_count: number;
   post_count: number;
   is_following: boolean;
+  follows_me: boolean;
 };
 
 export type ConversationSummary = {
@@ -43,6 +44,7 @@ export type ConversationSummary = {
   last_message: string;
   last_message_at: string;
   unread_count: number;
+  other_user_last_read_at: string | null;
 };
 
 export type MessageRecord = {
@@ -144,16 +146,22 @@ export async function getUserDirectoryEntry(currentUserId: string, userId: strin
 
   if (error) throw error;
 
-  const [stats, followingRows] = await Promise.all([
+  const [stats, followingRows, followsMeRows] = await Promise.all([
     getProfileStats(userId),
     supabase
       .from("follows")
       .select("following_id")
       .eq("follower_id", currentUserId)
       .eq("following_id", userId),
+    supabase
+      .from("follows")
+      .select("follower_id")
+      .eq("follower_id", userId)
+      .eq("following_id", currentUserId),
   ]);
 
   if (followingRows.error) throw followingRows.error;
+  if (followsMeRows.error) throw followsMeRows.error;
 
   return {
     ...(profile as Profile),
@@ -161,6 +169,7 @@ export async function getUserDirectoryEntry(currentUserId: string, userId: strin
     following_count: stats.following_count,
     post_count: stats.post_count,
     is_following: (followingRows.data || []).length > 0,
+    follows_me: (followsMeRows.data || []).length > 0,
   } as UserDirectoryEntry;
 }
 
@@ -286,32 +295,19 @@ export async function togglePostLike(postId: string, userId: string, liked: bool
   if (error) throw error;
 }
 
-export async function listUsers(currentUserId: string, search: string) {
-  let query = supabase
-    .from("profiles")
-    .select("*")
-    .neq("id", currentUserId)
-    .order("username", { ascending: true })
-    .limit(50);
+async function hydrateProfiles(profiles: Profile[], currentUserId: string): Promise<UserDirectoryEntry[]> {
+  const profileIds = profiles.map((profile) => profile.id);
+  if (!profileIds.length) return [];
 
-  const trimmed = search.trim();
-  if (trimmed) {
-    query = query.or(`username.ilike.%${trimmed}%,full_name.ilike.%${trimmed}%`);
-  }
-
-  const { data: profiles, error } = await query;
-  if (error) throw error;
-
-  const profileIds = (profiles || []).map((profile) => profile.id);
-  if (!profileIds.length) return [] as UserDirectoryEntry[];
-
-  const [{ data: followingRows }, { data: followerRows }, { data: posts }] = await Promise.all([
+  const [{ data: followingRows }, { data: followerRows }, { data: posts }, { data: followsMeRows }] = await Promise.all([
     supabase.from("follows").select("following_id").eq("follower_id", currentUserId),
     supabase.from("follows").select("follower_id,following_id").in("following_id", profileIds),
     supabase.from("posts").select("author_id").in("author_id", profileIds),
+    supabase.from("follows").select("follower_id").eq("following_id", currentUserId).in("follower_id", profileIds),
   ]);
 
   const followingSet = new Set((followingRows || []).map((row) => row.following_id));
+  const followsMeSet = new Set((followsMeRows || []).map((row) => row.follower_id));
   const followerCounts = new Map<string, number>();
   const postCounts = new Map<string, number>();
 
@@ -333,13 +329,59 @@ export async function listUsers(currentUserId: string, search: string) {
     followingCounts.set(row.follower_id, (followingCounts.get(row.follower_id) || 0) + 1);
   }
 
-  return (profiles || []).map((profile) => ({
+  return profiles.map((profile) => ({
     ...(profile as Profile),
     follower_count: followerCounts.get(profile.id) || 0,
     following_count: followingCounts.get(profile.id) || 0,
     post_count: postCounts.get(profile.id) || 0,
     is_following: followingSet.has(profile.id),
+    follows_me: followsMeSet.has(profile.id),
   }));
+}
+
+export async function listUsers(currentUserId: string, search: string) {
+  let query = supabase
+    .from("profiles")
+    .select("*")
+    .neq("id", currentUserId)
+    .order("username", { ascending: true })
+    .limit(50);
+
+  const trimmed = search.trim();
+  if (trimmed) {
+    query = query.or(`username.ilike.%${trimmed}%,full_name.ilike.%${trimmed}%`);
+  }
+
+  const { data: profiles, error } = await query;
+  if (error) throw error;
+  
+  return hydrateProfiles((profiles || []) as Profile[], currentUserId);
+}
+
+export async function getFollowersList(userId: string, currentUserId: string) {
+  const { data: follows, error } = await supabase.from("follows").select("follower_id").eq("following_id", userId);
+  if (error) throw error;
+  
+  const followerIds = (follows || []).map(row => row.follower_id);
+  if (!followerIds.length) return [];
+  
+  const { data: profiles, error: profilesError } = await supabase.from("profiles").select("*").in("id", followerIds);
+  if (profilesError) throw profilesError;
+  
+  return hydrateProfiles((profiles || []) as Profile[], currentUserId);
+}
+
+export async function getFollowingList(userId: string, currentUserId: string) {
+  const { data: follows, error } = await supabase.from("follows").select("following_id").eq("follower_id", userId);
+  if (error) throw error;
+  
+  const followingIds = (follows || []).map(row => row.following_id);
+  if (!followingIds.length) return [];
+  
+  const { data: profiles, error: profilesError } = await supabase.from("profiles").select("*").in("id", followingIds);
+  if (profilesError) throw profilesError;
+  
+  return hydrateProfiles((profiles || []) as Profile[], currentUserId);
 }
 
 export async function followUser(currentUserId: string, otherUserId: string) {
@@ -444,7 +486,7 @@ export async function listConversations(currentUserId: string) {
   );
 
   const [{ data: allParticipants }, { data: messages }] = await Promise.all([
-    supabase.from("conversation_participants").select("conversation_id,user_id").in("conversation_id", conversationIds),
+    supabase.from("conversation_participants").select("conversation_id,user_id,last_read_at").in("conversation_id", conversationIds),
     supabase.from("messages").select("*").in("conversation_id", conversationIds).order("created_at", { ascending: false }),
   ]);
 
@@ -463,6 +505,11 @@ export async function listConversations(currentUserId: string) {
     (allParticipants || [])
       .filter((row) => row.user_id !== currentUserId)
       .map((row) => [row.conversation_id, row.user_id]),
+  );
+  const otherUserReadByConversation = new Map(
+    (allParticipants || [])
+      .filter((row) => row.user_id !== currentUserId)
+      .map((row) => [row.conversation_id, row.last_read_at]),
   );
 
   const messagesByConversation = new Map<string, MessageRecord[]>();
@@ -487,6 +534,7 @@ export async function listConversations(currentUserId: string) {
         last_message: latest?.body || "",
         last_message_at: latest?.created_at || "1970-01-01T00:00:00.000Z",
         unread_count: unreadCount,
+        other_user_last_read_at: otherUserReadByConversation.get(conversationId) || null,
       } satisfies ConversationSummary;
     })
     .sort(

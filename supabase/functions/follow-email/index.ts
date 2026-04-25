@@ -28,7 +28,7 @@ Deno.serve(async () => {
   const { data: jobs, error: jobsError } = await supabase
     .from("email_notifications")
     .select("id, recipient_user_id, actor_user_id, type, payload")
-    .eq("type", "new_follower")
+    .in("type", ["new_follower", "new_message"])
     .is("processed_at", null)
     .order("created_at", { ascending: true })
     .limit(25);
@@ -52,6 +52,36 @@ Deno.serve(async () => {
     const actorName =
       actorProfile?.full_name?.trim() || actorProfile?.username || "A birdwatcher";
 
+    let subject = "";
+    let html = "";
+
+    if (job.type === "new_follower") {
+      subject = "You have a new follower";
+      html = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+          <h2>You have a new follower</h2>
+          <p><strong>${actorName}</strong> just followed you on Feather Finder.</p>
+          <p>Open the app to view their profile or send them a message.</p>
+        </div>
+      `;
+    } else if (job.type === "new_message") {
+      subject = `New message from ${actorName}`;
+      const msgBody = typeof job.payload.body === 'string' ? job.payload.body : '';
+      const snippet = msgBody.length > 200 ? msgBody.substring(0, 200) + '...' : msgBody;
+      html = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+          <h2>New message from ${actorName}</h2>
+          <p>You have received a new direct message from <strong>${actorName}</strong> on Feather Finder.</p>
+          <p style="padding: 12px; background: #f4f4f5; border-radius: 8px; font-style: italic; color: #3f3f46;">
+            "${snippet}"
+          </p>
+          <p>Open the app to reply.</p>
+        </div>
+      `;
+    } else {
+      continue;
+    }
+
     const resendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -61,14 +91,8 @@ Deno.serve(async () => {
       body: JSON.stringify({
         from: emailFrom,
         to: [recipientAuth.data.user.email],
-        subject: "You have a new follower",
-        html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-            <h2>You have a new follower</h2>
-            <p><strong>${actorName}</strong> just followed you on Feather Finder.</p>
-            <p>Open the app to view their profile or send them a message.</p>
-          </div>
-        `,
+        subject,
+        html,
       }),
     });
 

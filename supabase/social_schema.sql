@@ -134,6 +134,9 @@ alter table public.email_notifications enable row level security;
 alter table public.profiles
 add column if not exists new_follower_email_notifications boolean not null default true;
 
+alter table public.profiles
+add column if not exists new_message_email_notifications boolean not null default true;
+
 drop policy if exists "profiles_select_all" on public.profiles;
 create policy "profiles_select_all"
 on public.profiles for select
@@ -341,6 +344,55 @@ drop trigger if exists follows_queue_new_follower_email on public.follows;
 create trigger follows_queue_new_follower_email
 after insert on public.follows
 for each row execute procedure public.queue_new_follower_email();
+
+create or replace function public.queue_new_message_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  recipient_id uuid;
+begin
+  -- Find the recipient of the message
+  select cp.user_id into recipient_id
+  from public.conversation_participants cp
+  where cp.conversation_id = new.conversation_id
+    and cp.user_id != new.sender_id
+  limit 1;
+
+  if recipient_id is not null and exists (
+    select 1
+    from public.profiles p
+    where p.id = recipient_id
+      and p.new_message_email_notifications = true
+  ) then
+    insert into public.email_notifications (
+      type,
+      recipient_user_id,
+      actor_user_id,
+      payload
+    )
+    values (
+      'new_message',
+      recipient_id,
+      new.sender_id,
+      jsonb_build_object(
+        'message_id', new.id,
+        'conversation_id', new.conversation_id,
+        'body', new.body
+      )
+    );
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists messages_queue_new_message_email on public.messages;
+create trigger messages_queue_new_message_email
+after insert on public.messages
+for each row execute procedure public.queue_new_message_email();
 
 insert into storage.buckets (id, name, public)
 values ('media', 'media', true)

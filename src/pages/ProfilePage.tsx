@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FollowListDialog } from "@/components/FollowListDialog";
 import { toast } from "@/hooks/use-toast";
 import {
   formatRelativeTime,
@@ -29,6 +30,7 @@ const ProfilePage = () => {
   const [bio, setBio] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [followListType, setFollowListType] = useState<"followers" | "following" | null>(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
@@ -144,8 +146,12 @@ const ProfilePage = () => {
 
               <div className="mt-6 grid w-full grid-cols-3 gap-3">
                 <ProfileStat label="Posts" value={stats?.post_count || 0} />
-                <ProfileStat label="Followers" value={stats?.follower_count || 0} />
-                <ProfileStat label="Following" value={stats?.following_count || 0} />
+                <button type="button" onClick={() => setFollowListType("followers")} className="transition-opacity hover:opacity-70 text-left">
+                  <ProfileStat label="Followers" value={stats?.follower_count || 0} />
+                </button>
+                <button type="button" onClick={() => setFollowListType("following")} className="transition-opacity hover:opacity-70 text-left">
+                  <ProfileStat label="Following" value={stats?.following_count || 0} />
+                </button>
               </div>
             </div>
           )}
@@ -246,6 +252,13 @@ const ProfilePage = () => {
           Sign out
         </Button>
       </div>
+
+      <FollowListDialog
+        isOpen={!!followListType}
+        onClose={() => setFollowListType(null)}
+        userId={user!.id}
+        type={followListType || "followers"}
+      />
     </div>
   );
 };
