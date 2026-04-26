@@ -23,7 +23,6 @@ const BottomNav = () => {
     queryKey: ["messages-unread-count", user?.id],
     queryFn: () => getUnreadConversationCount(user!.id),
     enabled: !!user?.id,
-    refetchInterval: 5000,
   });
 
   return (

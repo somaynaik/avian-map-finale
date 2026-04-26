@@ -16,7 +16,6 @@ const MessagesPage = () => {
     queryKey: ["conversations", user?.id],
     queryFn: () => listConversations(user!.id),
     enabled: !!user?.id,
-    refetchInterval: 5000,
   });
 
   const filteredConversations = useMemo(() => {

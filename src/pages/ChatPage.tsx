@@ -63,7 +63,6 @@ const ChatPage = () => {
     queryKey: ["messages", selectedConversationId],
     queryFn: () => getConversationMessages(selectedConversationId!),
     enabled: !!selectedConversationId,
-    refetchInterval: 3000,
   });
 
   // Calculate the other user's last read based on the full conversation summary.
@@ -80,7 +79,6 @@ const ChatPage = () => {
       return data;
     },
     enabled: !!selectedConversationId && !!targetUserId,
-    refetchInterval: 5000,
   });
 
   useEffect(() => {
@@ -96,7 +94,7 @@ const ChatPage = () => {
   useEffect(() => {
     if (!selectedConversationId || !user?.id) return;
 
-    const channel = supabase.channel(`typing:${selectedConversationId}`);
+    const channel = supabase.channel(`chat:${selectedConversationId}`);
     channelRef.current = channel;
 
     channel
@@ -117,6 +115,32 @@ const ChatPage = () => {
           }, 3000);
         }
       })
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${selectedConversationId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+          queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["messages-unread-count", user.id] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "conversation_participants",
+          filter: `conversation_id=eq.${selectedConversationId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["conversation-participant", selectedConversationId, targetUserId] });
+        }
+      )
       .subscribe();
 
     return () => {
@@ -124,7 +148,7 @@ const ChatPage = () => {
       channelRef.current = null;
       setTypingUsers(new Set());
     };
-  }, [selectedConversationId, user?.id]);
+  }, [selectedConversationId, user?.id, targetUserId, queryClient]);
 
   const latestMyMessage = useMemo(() => {
     return [...messages].reverse().find(m => m.sender_id === user?.id);
