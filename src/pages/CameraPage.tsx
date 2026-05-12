@@ -1,5 +1,5 @@
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Camera, ImagePlus, Loader2, MapPin, Sparkles } from "lucide-react";
+import { ArrowLeft, Camera, ImagePlus, Loader2, MapPin, Sparkles, Mic, Square, Upload, Music } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import maplibregl from "maplibre-gl";
@@ -22,6 +22,11 @@ const CameraPage = () => {
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+
   const [speciesName, setSpeciesName] = useState("");
   const [locationName, setLocationName] = useState("");
   const [note, setNote] = useState("");
@@ -45,6 +50,14 @@ const CameraPage = () => {
     setImagePreview(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [imageFile]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
 
   // Initialize mini-map when showMap becomes true
   useEffect(() => {
@@ -154,11 +167,18 @@ const CameraPage = () => {
   }, [showMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const classifyMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (file: File | Blob) => {
       const formData = new FormData();
-      formData.append("file", file, file.name);
+      const isAudio = file.type.startsWith("audio");
+      
+      if (isAudio) {
+        formData.append("file", file, "audio_recording.wav");
+      } else {
+        formData.append("file", file, (file as File).name || "image.jpg");
+      }
 
-      const response = await fetch(`${CLASSIFIER_URL}/classify-image`, {
+      const endpoint = isAudio ? "/classify-audio" : "/classify-image";
+      const response = await fetch(`${CLASSIFIER_URL}${endpoint}`, {
         method: "POST",
         body: formData,
       });
@@ -192,11 +212,16 @@ const CameraPage = () => {
 
   const createPostMutation = useMutation({
     mutationFn: async () => {
-      if (!imageFile) {
-        throw new Error("Upload an image before posting.");
+      if (!imageFile && !audioBlob) {
+        throw new Error("Upload an image or record audio before posting.");
       }
 
-      const imageUrl = await uploadPostImage(user!.id, imageFile);
+      // If only audio is provided, use a default image since image_url is required by the DB
+      let imageUrl = "https://i.postimg.cc/3JXmQBSp/avian-map-final-logo.jpg";
+      if (imageFile) {
+        imageUrl = await uploadPostImage(user!.id, imageFile);
+      }
+      
       return createPost({
         author_id: user!.id,
         species_name: speciesName,
@@ -231,13 +256,66 @@ const CameraPage = () => {
     const file = event.target.files?.[0] || null;
     if (!file) return;
 
+    setAudioBlob(null);
     setImageFile(file);
     setPredictedSpecies(null);
     classifyMutation.mutate(file);
   };
 
+  const handleAudioUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+
+    setImageFile(null);
+    setAudioBlob(file);
+    setPredictedSpecies(null);
+    classifyMutation.mutate(file);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        setAudioBlob(audioBlob);
+        setImageFile(null);
+        setPredictedSpecies(null);
+        classifyMutation.mutate(audioBlob);
+        
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    } catch (err: any) {
+      toast({
+        title: "Microphone Error",
+        description: "Could not access your microphone. Please allow permissions.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
   const handleClear = () => {
     setImageFile(null);
+    setAudioBlob(null);
     setPredictedSpecies(null);
     setSpeciesName("");
   };
@@ -259,40 +337,84 @@ const CameraPage = () => {
       </div>
 
       <div className="mx-auto max-w-lg space-y-4 px-4 pt-4">
-        {/* Image preview / upload area */}
+        {/* Media Preview / Upload Area */}
         <div className="overflow-hidden rounded-3xl border border-border bg-card">
           {imagePreview ? (
             <img src={imagePreview} alt="Captured bird" className="aspect-[4/5] w-full object-cover" />
+          ) : audioBlob ? (
+            <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 bg-muted/30">
+              <div className="rounded-full bg-primary/20 p-6 animate-pulse">
+                <Music className="h-16 w-16 text-primary" />
+              </div>
+              <p className="font-semibold text-lg">Audio Recorded</p>
+              <audio controls src={URL.createObjectURL(audioBlob)} className="mt-4" />
+            </div>
           ) : (
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 text-center transition-colors hover:bg-muted/50">
-                <div className="rounded-full bg-primary/10 p-5">
+            <div className="flex aspect-[4/5] flex-col items-center justify-center gap-6 text-center">
+              
+              {/* Image Input */}
+              <label className="cursor-pointer group flex flex-col items-center gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <div className="rounded-full bg-primary/10 p-5 group-hover:bg-primary/20 transition-colors">
                   <Camera className="h-10 w-10 text-primary" />
                 </div>
                 <div>
-                  <p className="font-semibold text-lg">Tap to take or upload a photo</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your phone camera will open, or you can pick from gallery
-                  </p>
+                  <p className="font-semibold">Tap to take a photo</p>
                 </div>
+              </label>
+
+              <div className="flex items-center gap-4 w-full px-12 opacity-50">
+                <div className="h-px bg-border flex-1"></div>
+                <span className="text-xs font-medium uppercase">or</span>
+                <div className="h-px bg-border flex-1"></div>
               </div>
-            </label>
+
+              {/* Audio Controls */}
+              <div className="flex gap-8">
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={`rounded-full p-5 transition-colors ${
+                      isRecording 
+                        ? 'bg-destructive/20 text-destructive hover:bg-destructive/30 animate-pulse' 
+                        : 'bg-primary/10 text-primary hover:bg-primary/20'
+                    }`}
+                  >
+                    {isRecording ? <Square className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+                  </button>
+                  <p className="text-sm font-medium">{isRecording ? "Stop" : "Record Call"}</p>
+                </div>
+
+                <label className="cursor-pointer flex flex-col items-center gap-2">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={handleAudioUpload}
+                  />
+                  <div className="rounded-full bg-primary/10 p-5 hover:bg-primary/20 transition-colors">
+                    <Upload className="h-8 w-8 text-primary" />
+                  </div>
+                  <p className="text-sm font-medium">Upload Audio</p>
+                </label>
+              </div>
+
+            </div>
           )}
         </div>
 
         {/* Action buttons */}
-        {imagePreview ? (
+        {(imagePreview || audioBlob) ? (
           <div className="grid grid-cols-2 gap-3">
             <Button type="button" variant="outline" onClick={handleClear}>
-              <ImagePlus className="h-4 w-4" />
-              Choose different photo
+              <ImagePlus className="h-4 w-4 mr-2" />
+              Clear Media
             </Button>
             <label>
               <input
