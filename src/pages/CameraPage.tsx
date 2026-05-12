@@ -211,9 +211,10 @@ const CameraPage = () => {
       queryClient.invalidateQueries({ queryKey: ["feed", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile-posts", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile-stats", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["community-map-posts"] });
       toast({
         title: "Post created",
-        description: "Your sighting is now in the live feed.",
+        description: "Your sighting is now in the live feed and on the map.",
       });
       navigate("/feed");
     },
