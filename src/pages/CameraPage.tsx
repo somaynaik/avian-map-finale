@@ -187,8 +187,19 @@ const CameraPage = () => {
       if (!response.ok || data.error) {
         throw new Error(
           data.error ||
-            "The classifier server did not accept the image. Check that birdscanner is running and CORS is enabled.",
+            "The classifier server did not accept the file. Check that birdscanner is running and CORS is enabled.",
         );
+      }
+
+      if (data.rejected) {
+        throw new Error(data.message || "No confident bird calls were detected.");
+      }
+
+      // The audio API returns { candidates: [{ species: "..." }] } instead of { species: "..." }
+      if (isAudio && data.candidates && data.candidates.length > 0) {
+        data.species = data.candidates[0].species;
+      } else if (isAudio) {
+        throw new Error("Could not determine species from the audio recording.");
       }
 
       return data as { species: string; type: string };
