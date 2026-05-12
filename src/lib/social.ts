@@ -433,7 +433,7 @@ export type GeoTaggedPost = Post & {
  * Fetch posts that have coordinates and were created within the last `maxAgeHours` hours.
  * Used to show community-pinned observations on the map.
  */
-export async function getRecentGeoTaggedPosts(maxAgeHours = 6) {
+export async function getRecentGeoTaggedPosts(maxAgeHours = 48) {
   const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
 
   const { data: posts, error } = await supabase

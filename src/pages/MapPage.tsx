@@ -130,10 +130,10 @@ const MapPage = () => {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  // Fetch community geo-tagged posts (< 6 hrs old)
+  // Fetch community geo-tagged posts (< 48 hrs old)
   const { data: communityPosts = [] } = useQuery({
     queryKey: ['community-map-posts'],
-    queryFn: () => getRecentGeoTaggedPosts(6),
+    queryFn: () => getRecentGeoTaggedPosts(48),
     refetchInterval: 2 * 60 * 1000, // refresh every 2 min
   });
 
