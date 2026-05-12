@@ -20,6 +20,8 @@ export type Post = {
   location_name: string | null;
   note: string | null;
   image_url: string;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -225,6 +227,8 @@ export async function createPost(input: {
   location_name?: string;
   note?: string;
   image_url: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }) {
   const { data, error } = await supabase
     .from("posts")
@@ -234,6 +238,8 @@ export async function createPost(input: {
       location_name: input.location_name?.trim() || null,
       note: input.note?.trim() || null,
       image_url: input.image_url,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
     })
     .select("*")
     .single();
@@ -417,6 +423,45 @@ export async function getProfileStats(userId: string) {
     follower_count: followerCount || 0,
     following_count: followingCount || 0,
   } as ProfileStats;
+}
+
+export type GeoTaggedPost = Post & {
+  author: Pick<Profile, "id" | "username" | "avatar_url"> | null;
+};
+
+/**
+ * Fetch posts that have coordinates and were created within the last `maxAgeHours` hours.
+ * Used to show community-pinned observations on the map.
+ */
+export async function getRecentGeoTaggedPosts(maxAgeHours = 6) {
+  const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
+
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("*")
+    .not("latitude", "is", null)
+    .not("longitude", "is", null)
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+  if (!posts?.length) return [] as GeoTaggedPost[];
+
+  const authorIds = [...new Set(posts.map((p) => p.author_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id,username,avatar_url")
+    .in("id", authorIds);
+
+  const profileById = new Map(
+    (profiles || []).map((p) => [p.id, p as Pick<Profile, "id" | "username" | "avatar_url">]),
+  );
+
+  return posts.map((post) => ({
+    ...(post as Post),
+    author: profileById.get(post.author_id) || null,
+  })) as GeoTaggedPost[];
 }
 
 export async function getRecentPostsForUser(userId: string) {

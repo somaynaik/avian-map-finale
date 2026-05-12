@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapPage.css";
-import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check } from "lucide-react";
+import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Geolocation } from "@capacitor/geolocation";
 import { getRecentObservations, getNearbyObservations, type RecentObservation } from "@/lib/ebird";
+import { getRecentGeoTaggedPosts, type GeoTaggedPost } from "@/lib/social";
 import { useQuery } from "@tanstack/react-query";
 
 // Indian states/regions for filtering
@@ -65,10 +66,24 @@ function getTimeAgo(dateString: string): string {
   return 'Just now';
 }
 
+// Helper to calculate distance in km using Haversine formula
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c;
+}
+
 const MapPage = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const communityMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -113,6 +128,13 @@ const MapPage = () => {
     },
     enabled: selectedRegion !== 'NEARBY' || !!userLocation,
     refetchInterval: 5 * 60 * 1000,
+  });
+
+  // Fetch community geo-tagged posts (< 6 hrs old)
+  const { data: communityPosts = [] } = useQuery({
+    queryKey: ['community-map-posts'],
+    queryFn: () => getRecentGeoTaggedPosts(6),
+    refetchInterval: 2 * 60 * 1000, // refresh every 2 min
   });
 
   // Group sightings by species for the sidebar
@@ -384,10 +406,83 @@ const MapPage = () => {
     console.log(`Added ${markersRef.current.size} markers to map`);
   }, [sightings]);
 
+  // Add community post markers (orange, distinct from eBird green)
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Remove old community markers
+    communityMarkersRef.current.forEach(marker => marker.remove());
+    communityMarkersRef.current.clear();
+
+    if (!communityPosts.length) return;
+
+    communityPosts.forEach((post) => {
+      if (post.latitude == null || post.longitude == null) return;
+
+      const key = `community-${post.id}`;
+
+      const el = document.createElement("div");
+      el.style.cssText = `
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #e67e22;
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(230,126,34,0.5);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      `;
+      el.textContent = "📸";
+
+      const timeAgo = getTimeAgo(post.created_at);
+      const username = post.author?.username || 'Unknown';
+
+      const popup = new maplibregl.Popup({
+        offset: 25,
+        closeButton: true,
+        closeOnClick: false,
+        maxWidth: '300px',
+      }).setHTML(`
+        <div style="font-family: system-ui, sans-serif;">
+          ${post.image_url ? `<img src="${post.image_url}" alt="${post.species_name}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" />` : ''}
+          <div style="padding: 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <span style="background: #e67e22; color: white; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;">Community</span>
+              <span style="font-size: 11px; color: #888;">by @${username}</span>
+            </div>
+            <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">
+              ${post.species_name}
+            </h3>
+            ${post.location_name ? `<p style="margin: 0 0 4px 0; font-size: 12px;">📍 ${post.location_name}</p>` : ''}
+            <p style="margin: 0; font-size: 11px; color: #666;">🕒 ${timeAgo}</p>
+            ${post.note ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #444;">${post.note}</p>` : ''}
+          </div>
+        </div>
+      `);
+
+      const marker = new maplibregl.Marker({
+        element: el,
+        anchor: 'center',
+      })
+        .setLngLat([post.longitude, post.latitude])
+        .setPopup(popup)
+        .addTo(map.current!);
+
+      communityMarkersRef.current.set(key, marker);
+    });
+  }, [communityPosts]);
+
   // Filter markers visibility based on search
   useEffect(() => {
     if (!searchQuery) {
       markersRef.current.forEach(marker => {
+        const el = marker.getElement();
+        el.style.display = 'flex';
+      });
+      communityMarkersRef.current.forEach(marker => {
         const el = marker.getElement();
         el.style.display = 'flex';
       });
@@ -409,7 +504,17 @@ const MapPage = () => {
         el.style.display = matches ? 'flex' : 'none';
       }
     });
-  }, [searchQuery, sightings]);
+
+    communityPosts.forEach((post) => {
+      const key = `community-${post.id}`;
+      const marker = communityMarkersRef.current.get(key);
+      if (marker) {
+        const matches = post.species_name.toLowerCase().includes(searchLower);
+        const el = marker.getElement();
+        el.style.display = matches ? 'flex' : 'none';
+      }
+    });
+  }, [searchQuery, sightings, communityPosts]);
 
   // Center map on user location
   const handleLocate = async () => {
@@ -543,11 +648,83 @@ const MapPage = () => {
 
             {/* Sightings List */}
             <div className="flex-1 overflow-y-auto">
+              {/* Community Sightings Section */}
+              {communityPosts.length > 0 && (
+                <div className="p-2 pb-0">
+                  <div className="flex items-center gap-2 px-1 py-2">
+                    <div className="w-5 h-5 rounded-full bg-[#e67e22] flex items-center justify-center text-[10px]">📸</div>
+                    <span className="text-xs font-semibold text-[#e67e22] uppercase tracking-wide">Community Sightings</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">Last 6 hrs</span>
+                  </div>
+                  {communityPosts.map((post) => (
+                    <button
+                      key={post.id}
+                      onClick={() => {
+                        if (post.latitude != null && post.longitude != null) {
+                          map.current?.flyTo({
+                            center: [post.longitude, post.latitude],
+                            zoom: 14,
+                            duration: 1500,
+                          });
+                          const key = `community-${post.id}`;
+                          const marker = communityMarkersRef.current.get(key);
+                          if (marker && map.current) {
+                            marker.getPopup().addTo(map.current);
+                          }
+                        }
+                      }}
+                      className="w-full p-3 mb-2 bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/30 dark:hover:bg-orange-950/50 rounded-xl text-left transition-colors border border-orange-200 dark:border-orange-900/50"
+                    >
+                      <div className="flex items-start gap-3">
+                        {post.image_url && (
+                          <img
+                            src={post.image_url}
+                            alt={post.species_name}
+                            className="w-10 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-sm truncate">{post.species_name}</h3>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            by @{post.author?.username || 'unknown'}
+                          </p>
+                          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                            {post.location_name && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {post.location_name.split(',')[0]}
+                              </span>
+                            )}
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {getTimeAgo(post.created_at)}
+                              </span>
+                              {userLocation && post.latitude != null && post.longitude != null && (
+                                <span className="flex items-center gap-1">
+                                  • {getDistance(userLocation.lat, userLocation.lng, post.latitude, post.longitude).toFixed(1)} km
+                                </span>
+                              )}
+                            </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* eBird Sightings Section */}
+              {communityPosts.length > 0 && groupedSightings.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <div className="w-5 h-5 rounded-full bg-[#3a7d52] flex items-center justify-center text-[10px]">🐦</div>
+                  <span className="text-xs font-semibold text-[#3a7d52] uppercase tracking-wide">eBird Sightings</span>
+                </div>
+              )}
+
               {isLoading ? (
                 <div className="flex items-center justify-center h-32">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
-              ) : groupedSightings.length === 0 ? (
+              ) : groupedSightings.length === 0 && communityPosts.length === 0 ? (
                 <div className="p-4 text-center text-muted-foreground text-sm">
                   No sightings found in this region
                 </div>
@@ -601,7 +778,7 @@ const MapPage = () => {
             {/* Sidebar Footer */}
             <div className="p-3 border-t border-border">
               <div className="text-xs text-muted-foreground text-center">
-                {sightings.length} total observations
+                {sightings.length} eBird + {communityPosts.length} community observations
               </div>
             </div>
           </motion.div>

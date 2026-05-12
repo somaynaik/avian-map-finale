@@ -305,9 +305,25 @@ with check (
 drop policy if exists "email_notifications_service_only" on public.email_notifications;
 create policy "email_notifications_service_only"
 on public.email_notifications for all
-to authenticated
-using (false)
-with check (false);
+to service_role
+using (true)
+with check (true);
+
+-- Performance Indexes to prevent sequential scans and save Disk IO
+CREATE INDEX IF NOT EXISTS idx_posts_author_id ON public.posts (author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON public.posts (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON public.post_likes (post_id);
+CREATE INDEX IF NOT EXISTS idx_post_likes_user_id ON public.post_likes (user_id);
+CREATE INDEX IF NOT EXISTS idx_follows_follower_id ON public.follows (follower_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following_id ON public.follows (following_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_participants_conv_id ON public.conversation_participants (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON public.conversation_participants (user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON public.messages (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON public.messages (sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_notifications_recipient_id ON public.email_notifications (recipient_user_id);
+CREATE INDEX IF NOT EXISTS idx_email_notifications_actor_id ON public.email_notifications (actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_email_notifications_processed_at ON public.email_notifications (processed_at);
 
 create or replace function public.queue_new_follower_email()
 returns trigger

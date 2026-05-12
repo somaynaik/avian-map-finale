@@ -1,7 +1,10 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Camera, ImagePlus, Loader2, RefreshCcw, Sparkles } from "lucide-react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Camera, ImagePlus, Loader2, MapPin, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { Geolocation } from "@capacitor/geolocation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +19,6 @@ const CameraPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const cameraTimeoutRef = useRef<number | null>(null);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -27,9 +26,14 @@ const CameraPage = () => {
   const [locationName, setLocationName] = useState("");
   const [note, setNote] = useState("");
   const [predictedSpecies, setPredictedSpecies] = useState<string | null>(null);
-  const [cameraEnabled, setCameraEnabled] = useState(false);
-  const [cameraStarting, setCameraStarting] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // Location pin state
+  const [pinLocation, setPinLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [locatingUser, setLocatingUser] = useState(false);
+  const miniMapContainerRef = useRef<HTMLDivElement>(null);
+  const miniMapRef = useRef<maplibregl.Map | null>(null);
+  const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   useEffect(() => {
     if (!imageFile) {
@@ -42,57 +46,112 @@ const CameraPage = () => {
     return () => URL.revokeObjectURL(objectUrl);
   }, [imageFile]);
 
+  // Initialize mini-map when showMap becomes true
   useEffect(() => {
+    if (!showMap || !miniMapContainerRef.current || miniMapRef.current) return;
+
+    const center: [number, number] = pinLocation
+      ? [pinLocation.lng, pinLocation.lat]
+      : [78.9629, 20.5937]; // Default: center of India
+
+    const mapInstance = new maplibregl.Map({
+      container: miniMapContainerRef.current,
+      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      center,
+      zoom: pinLocation ? 14 : 4.5,
+    });
+
+    mapInstance.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    // Create draggable marker
+    const markerEl = document.createElement("div");
+    markerEl.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: grab;
+    `;
+    markerEl.innerHTML = `
+      <div style="
+        width: 36px; height: 36px;
+        background: #1F5D3B;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        border: 3px solid white;
+      ">
+        <span style="transform: rotate(45deg); font-size: 16px;">🐦</span>
+      </div>
+      <div style="
+        width: 8px; height: 8px;
+        background: rgba(31,93,59,0.3);
+        border-radius: 50%;
+        margin-top: 2px;
+      "></div>
+    `;
+
+    const marker = new maplibregl.Marker({
+      element: markerEl,
+      draggable: true,
+      anchor: "bottom",
+    })
+      .setLngLat(center)
+      .addTo(mapInstance);
+
+    marker.on("dragend", () => {
+      const lngLat = marker.getLngLat();
+      setPinLocation({ lat: lngLat.lat, lng: lngLat.lng });
+    });
+
+    pinMarkerRef.current = marker;
+    miniMapRef.current = mapInstance;
+
     return () => {
-      if (cameraTimeoutRef.current) {
-        window.clearTimeout(cameraTimeoutRef.current);
-      }
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+      mapInstance.remove();
+      miniMapRef.current = null;
+      pinMarkerRef.current = null;
     };
-  }, []);
+  }, [showMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startCamera = async () => {
-    if (cameraStarting || cameraEnabled) return;
-
-    setCameraStarting(true);
-    setCameraError(null);
-    setCameraEnabled(false);
-
+  // Auto-locate user when map is opened
+  const locateAndCenter = useCallback(async () => {
+    setLocatingUser(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
+      const position = await Geolocation.getCurrentPosition();
+      const { latitude, longitude } = position.coords;
+      const loc = { lat: latitude, lng: longitude };
+      setPinLocation(loc);
 
-      streamRef.current = stream;
-      setCameraEnabled(true);
-      setCameraStarting(false);
-
-      if (cameraTimeoutRef.current) {
-        window.clearTimeout(cameraTimeoutRef.current);
-      }
-
-      cameraTimeoutRef.current = window.setTimeout(() => {
-        if (!videoRef.current?.videoWidth) {
-          setCameraStarting(false);
-          setCameraError("Camera startup is slow on this device. You can still upload a photo instantly.");
-        }
-      }, 4000);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch((error) => {
-          console.error("Video playback did not start automatically", error);
+      if (miniMapRef.current) {
+        miniMapRef.current.flyTo({
+          center: [longitude, latitude],
+          zoom: 14,
+          duration: 1500,
         });
       }
+
+      if (pinMarkerRef.current) {
+        pinMarkerRef.current.setLngLat([longitude, latitude]);
+      }
     } catch (error) {
-      console.error("Could not access camera", error);
-      setCameraStarting(false);
-      setCameraEnabled(false);
-      setCameraError("Could not access the camera. Use Upload instead or allow camera permission.");
+      console.error("Could not get location:", error);
+      toast({
+        title: "Location unavailable",
+        description: "Could not get your location. Drag the pin manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setLocatingUser(false);
     }
-  };
+  }, []);
+
+  // When the user opens the map, auto-locate
+  useEffect(() => {
+    if (showMap && !pinLocation) {
+      locateAndCenter();
+    }
+  }, [showMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const classifyMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -134,7 +193,7 @@ const CameraPage = () => {
   const createPostMutation = useMutation({
     mutationFn: async () => {
       if (!imageFile) {
-        throw new Error("Capture or upload an image before posting.");
+        throw new Error("Upload an image before posting.");
       }
 
       const imageUrl = await uploadPostImage(user!.id, imageFile);
@@ -144,6 +203,8 @@ const CameraPage = () => {
         location_name: locationName,
         note,
         image_url: imageUrl,
+        latitude: pinLocation?.lat ?? null,
+        longitude: pinLocation?.lng ?? null,
       });
     },
     onSuccess: () => {
@@ -174,56 +235,10 @@ const CameraPage = () => {
     classifyMutation.mutate(file);
   };
 
-  const handleCapture = async () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    if (!video || !canvas) {
-      return;
-    }
-
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-
-    if (!width || !height) {
-      toast({
-        title: "Camera not ready",
-        description: "Wait for the live preview before capturing.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    context.drawImage(video, 0, 0, width, height);
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.92),
-    );
-
-    if (!blob) {
-      toast({
-        title: "Capture failed",
-        description: "The camera frame could not be converted into an image.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const file = new File([blob], `capture-${Date.now()}.jpg`, { type: "image/jpeg" });
-    setImageFile(file);
-    setPredictedSpecies(null);
-    classifyMutation.mutate(file);
-  };
-
-  const handleRetake = () => {
+  const handleClear = () => {
     setImageFile(null);
     setPredictedSpecies(null);
+    setSpeciesName("");
   };
 
   return (
@@ -236,102 +251,103 @@ const CameraPage = () => {
           <div>
             <h1 className="font-display text-2xl font-bold">Scan and post</h1>
             <p className="text-sm text-muted-foreground">
-              Capture a frame, run your local bird model, then publish the sighting
+              Upload a bird photo, identify the species via AI, then publish the sighting
             </p>
           </div>
         </div>
       </div>
 
       <div className="mx-auto max-w-lg space-y-4 px-4 pt-4">
+        {/* Image preview / upload area */}
         <div className="overflow-hidden rounded-3xl border border-border bg-card">
           {imagePreview ? (
             <img src={imagePreview} alt="Captured bird" className="aspect-[4/5] w-full object-cover" />
-          ) : cameraEnabled ? (
-            <div className="relative">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                onLoadedMetadata={() => setCameraStarting(false)}
-                onCanPlay={() => setCameraStarting(false)}
-                onPlaying={() => setCameraStarting(false)}
-                className="aspect-[4/5] w-full bg-black object-cover"
-              />
-              {cameraStarting && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white">
-                  Starting camera...
-                </div>
-              )}
-            </div>
           ) : (
-            <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-center">
-              <Camera className="h-10 w-10 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Camera optional</p>
-                <p className="text-sm text-muted-foreground">
-                  Start the live camera only if you need it. Upload works immediately.
-                </p>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 text-center transition-colors hover:bg-muted/50">
+                <div className="rounded-full bg-primary/10 p-5">
+                  <Camera className="h-10 w-10 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-lg">Tap to take or upload a photo</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your phone camera will open, or you can pick from gallery
+                  </p>
+                </div>
               </div>
-            </div>
+            </label>
           )}
         </div>
 
-        <canvas ref={canvasRef} className="hidden" />
-
-        {cameraError && (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            {cameraError}
+        {/* Action buttons */}
+        {imagePreview ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Button type="button" variant="outline" onClick={handleClear}>
+              <ImagePlus className="h-4 w-4" />
+              Choose different photo
+            </Button>
+            <label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button type="button" variant="outline" className="w-full" asChild>
+                <span>
+                  <Camera className="h-4 w-4" />
+                  Take new photo
+                </span>
+              </Button>
+            </label>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button type="button" variant="default" className="w-full" asChild>
+                <span>
+                  <Camera className="h-4 w-4" />
+                  Take photo
+                </span>
+              </Button>
+            </label>
+            <label>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button type="button" variant="outline" className="w-full" asChild>
+                <span>
+                  <ImagePlus className="h-4 w-4" />
+                  Upload from gallery
+                </span>
+              </Button>
+            </label>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            type="button"
-            variant={imagePreview ? "outline" : "default"}
-            onClick={imagePreview ? handleRetake : cameraEnabled ? handleCapture : startCamera}
-            disabled={classifyMutation.isPending || cameraStarting}
-          >
-            {imagePreview ? (
-              <>
-                <RefreshCcw className="h-4 w-4" />
-                Retake
-              </>
-            ) : cameraEnabled ? (
-              <>
-                <Camera className="h-4 w-4" />
-                Capture
-              </>
-            ) : (
-              <>
-                <Camera className="h-4 w-4" />
-                {cameraError ? "Retry camera" : cameraStarting ? "Starting..." : "Start camera"}
-              </>
-            )}
-          </Button>
-
-          <label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <Button type="button" variant="outline" className="w-full" asChild>
-              <span>
-                <ImagePlus className="h-4 w-4" />
-                Upload
-              </span>
-            </Button>
-          </label>
-        </div>
-
+        {/* Model prediction card */}
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">Model prediction</p>
-              <p className="text-xs text-muted-foreground">{CLASSIFIER_URL}/classify-image</p>
+              <p className="text-sm font-semibold">AI Model prediction</p>
             </div>
             {classifyMutation.isPending && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
           </div>
@@ -344,7 +360,7 @@ const CameraPage = () => {
               </span>
             ) : (
               <span className="text-muted-foreground">
-                Capture or upload an image to classify it with your local model.
+                Upload a photo to classify it with the AI model.
               </span>
             )}
           </div>
@@ -363,6 +379,59 @@ const CameraPage = () => {
           )}
         </div>
 
+        {/* Pin on map card */}
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Pin observation on map</p>
+              <p className="text-xs text-muted-foreground">
+                {pinLocation
+                  ? `📍 ${pinLocation.lat.toFixed(5)}, ${pinLocation.lng.toFixed(5)}`
+                  : "Drag the pin to mark where you saw the bird"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={showMap ? "outline" : "default"}
+              size="sm"
+              onClick={() => setShowMap(!showMap)}
+            >
+              <MapPin className="h-4 w-4" />
+              {showMap ? "Hide map" : "Open map"}
+            </Button>
+          </div>
+
+          {showMap && (
+            <div className="mt-3 space-y-2">
+              <div
+                ref={miniMapContainerRef}
+                className="h-64 w-full rounded-xl overflow-hidden border border-border"
+                style={{ minHeight: 256 }}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Drag the pin to adjust location
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={locatingUser}
+                  onClick={locateAndCenter}
+                >
+                  {locatingUser ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <MapPin className="h-3 w-3" />
+                  )}
+                  My location
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Form fields */}
         <div className="space-y-2">
           <Label htmlFor="species-name">Species name</Label>
           <Input

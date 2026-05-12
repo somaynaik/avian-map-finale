@@ -47,9 +47,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      if (event === 'PASSWORD_RECOVERY') {
+        // Redirect to the update password page when the user clicks the reset link in their email
+        window.location.href = '/update-password';
+        return;
+      }
+
       if (session?.user) {
         ensureProfile(session.user).catch((error) => {
           console.error('Failed to ensure profile', error);

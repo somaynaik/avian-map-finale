@@ -2,15 +2,18 @@
 // Required secrets:
 // - SUPABASE_URL
 // - SUPABASE_SERVICE_ROLE_KEY
-// - RESEND_API_KEY
-// - EMAIL_FROM
+// - SMTP_USER (your gmail address)
+// - SMTP_PASS (your gmail app password)
+// - EMAIL_FROM (optional, defaults to SMTP_USER)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
-const emailFrom = Deno.env.get("EMAIL_FROM") ?? "";
+const smtpUser = Deno.env.get("SMTP_USER") ?? "";
+const smtpPass = Deno.env.get("SMTP_PASS") ?? "";
+const emailFrom = Deno.env.get("EMAIL_FROM") ?? smtpUser;
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
@@ -21,7 +24,7 @@ type ProfileRow = {
 };
 
 Deno.serve(async () => {
-  if (!supabaseUrl || !serviceRoleKey || !resendApiKey || !emailFrom) {
+  if (!supabaseUrl || !serviceRoleKey || !smtpUser || !smtpPass) {
     return new Response("Missing required env vars", { status: 500 });
   }
 
@@ -37,7 +40,24 @@ Deno.serve(async () => {
     return new Response(jobsError.message, { status: 500 });
   }
 
-  for (const job of jobs ?? []) {
+  if (!jobs || jobs.length === 0) {
+    return Response.json({ processed: 0 });
+  }
+
+  // Initialize SMTP client for Gmail using denomailer
+  const smtpClient = new SMTPClient({
+    connection: {
+      hostname: "smtp.gmail.com",
+      port: 465,
+      tls: true,
+      auth: {
+        username: smtpUser,
+        password: smtpPass,
+      },
+    },
+  });
+
+  for (const job of jobs) {
     const recipientAuth = await supabase.auth.admin.getUserById(job.recipient_user_id);
     if (recipientAuth.error || !recipientAuth.data.user?.email) {
       continue;
@@ -82,30 +102,25 @@ Deno.serve(async () => {
       continue;
     }
 
-    const resendResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    try {
+      await smtpClient.send({
         from: emailFrom,
-        to: [recipientAuth.data.user.email],
+        to: recipientAuth.data.user.email,
         subject,
         html,
-      }),
-    });
+      });
 
-    if (!resendResponse.ok) {
-      const body = await resendResponse.text();
-      return new Response(body, { status: 500 });
+      await supabase
+        .from("email_notifications")
+        .update({ processed_at: new Date().toISOString() })
+        .eq("id", job.id);
+    } catch (error: any) {
+      console.error(`Failed to send email for job ${job.id}:`, error);
+      // Continue processing other jobs even if one fails
     }
-
-    await supabase
-      .from("email_notifications")
-      .update({ processed_at: new Date().toISOString() })
-      .eq("id", job.id);
   }
 
-  return Response.json({ processed: jobs?.length ?? 0 });
+  await smtpClient.close();
+
+  return Response.json({ processed: jobs.length });
 });

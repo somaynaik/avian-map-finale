@@ -9,6 +9,7 @@ import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import UpdatePasswordPage from "./pages/UpdatePasswordPage";
 import MapPage from "./pages/MapPage";
 import FeedPage from "./pages/FeedPage";
 import CameraPage from "./pages/CameraPage";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             
             {/* Protected routes */}
+            <Route path="/update-password" element={<ProtectedRoute><UpdatePasswordPage /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><AppLayout><MapPage /></AppLayout></ProtectedRoute>} />
             <Route path="/feed" element={<ProtectedRoute><AppLayout><FeedPage /></AppLayout></ProtectedRoute>} />
             <Route path="/camera" element={<ProtectedRoute><CameraPage /></ProtectedRoute>} />
