@@ -599,7 +599,7 @@ const CameraPage = () => {
         <Button
           type="button"
           className="w-full"
-          disabled={createPostMutation.isPending || !imageFile || !speciesName.trim()}
+          disabled={createPostMutation.isPending || (!imageFile && !audioBlob) || !speciesName.trim()}
           onClick={() => createPostMutation.mutate()}
         >
           {createPostMutation.isPending ? (
