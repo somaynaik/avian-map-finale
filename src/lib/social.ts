@@ -26,6 +26,16 @@ export type Post = {
   updated_at: string;
 };
 
+export type PostComment = {
+  id: string;
+  post_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author: Profile | null;
+};
+
 export type FeedPost = Post & {
   author: Profile | null;
   likes_count: number;
@@ -284,6 +294,42 @@ export async function listFeedPosts(currentUserId: string) {
       liked_by_me: postLikes.some((like) => like.user_id === currentUserId),
     };
   });
+}
+
+export async function listPostComments(postId: string): Promise<PostComment[]> {
+  const { data: comments, error } = await supabase
+    .from("post_comments")
+    .select(`
+      *,
+      author:profiles(*)
+    `)
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching comments:", error.message);
+    throw new Error(error.message);
+  }
+
+  // The join might return an array for author or a single object depending on mapping
+  // We typecast or normalize it:
+  return (comments || []).map((c: any) => ({
+    ...c,
+    author: Array.isArray(c.author) ? c.author[0] : c.author,
+  }));
+}
+
+export async function createPostComment(postId: string, authorId: string, body: string): Promise<void> {
+  const { error } = await supabase.from("post_comments").insert({
+    post_id: postId,
+    author_id: authorId,
+    body: body.trim(),
+  });
+
+  if (error) {
+    console.error("Error creating comment:", error.message);
+    throw new Error(error.message);
+  }
 }
 
 export async function togglePostLike(postId: string, userId: string, liked: boolean) {

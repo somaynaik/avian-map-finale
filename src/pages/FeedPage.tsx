@@ -1,11 +1,13 @@
-import { Heart, Loader2, MapPin, MessageCircle, Share2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { formatRelativeTime, getInitials, listFeedPosts, togglePostLike, type FeedPost } from "@/lib/social";
+import { formatRelativeTime, getInitials, listFeedPosts, togglePostLike, listPostComments, createPostComment, type FeedPost } from "@/lib/social";
 
 const FeedPage = () => {
   const { user } = useAuth();
@@ -80,7 +82,9 @@ const FeedCard = ({
   onToggleLike: () => void;
   isPending: boolean;
 }) => {
+  const { user } = useAuth();
   const authorName = post.author?.full_name || post.author?.username || "Unknown birder";
+  const [showComments, setShowComments] = useState(false);
 
   return (
     <motion.article
@@ -123,10 +127,16 @@ const FeedCard = ({
             />
             <span>{post.likes_count}</span>
           </Button>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <MessageCircle className="h-4 w-4" />
-            <span>Direct messages live in the Messages tab</span>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowComments(!showComments)}
+            className="px-0"
+          >
+            <MessageCircle className={`h-4 w-4 ${showComments ? "text-primary" : "text-muted-foreground"}`} />
+            <span>Comment</span>
+          </Button>
           <Share2 className="ml-auto h-4 w-4 text-muted-foreground" />
         </div>
 
@@ -139,7 +149,104 @@ const FeedCard = ({
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {showComments && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <CommentsSection postId={post.id} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.article>
+  );
+};
+
+const CommentsSection = ({ postId }: { postId: string }) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [newComment, setNewComment] = useState("");
+
+  const { data: comments, isLoading } = useQuery({
+    queryKey: ["comments", postId],
+    queryFn: () => listPostComments(postId),
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: (body: string) => createPostComment(postId, user!.id, body),
+    onSuccess: () => {
+      setNewComment("");
+      queryClient.invalidateQueries({ queryKey: ["comments", postId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not post comment",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    commentMutation.mutate(newComment);
+  };
+
+  return (
+    <div className="border-t border-border bg-muted/20 px-4 py-4">
+      {isLoading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : comments?.length === 0 ? (
+        <p className="py-3 text-center text-sm text-muted-foreground">No comments yet. Be the first!</p>
+      ) : (
+        <div className="space-y-4">
+          {comments?.map((comment) => (
+            <div key={comment.id} className="flex gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={comment.author?.avatar_url || undefined} />
+                <AvatarFallback>{getInitials(comment.author)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 rounded-2xl rounded-tl-none bg-muted/50 px-4 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{comment.author?.username || "User"}</p>
+                  <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.created_at)}</span>
+                </div>
+                <p className="mt-1 text-sm">{comment.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="mt-4 flex items-center gap-2">
+        <Input
+          placeholder="Add a comment..."
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          disabled={commentMutation.isPending}
+          className="rounded-full bg-background"
+        />
+        <Button
+          type="submit"
+          size="icon"
+          disabled={!newComment.trim() || commentMutation.isPending}
+          className="shrink-0 rounded-full"
+        >
+          {commentMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+        </Button>
+      </form>
+    </div>
   );
 };
 
