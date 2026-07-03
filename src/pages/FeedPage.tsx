@@ -333,7 +333,16 @@ const FeedPage = () => {
     </div>
   );
 };
-
+export const FeedCard = ({
+  post,
+  index,
+  onToggleLike,
+  isPending,
+}: {
+  post: FeedPost;
+  index: number;
+  onToggleLike: () => void;
+  isPending: boolean;
 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
