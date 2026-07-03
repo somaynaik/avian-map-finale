@@ -20,6 +20,7 @@ const isVideoUrl = (url?: string) => {
 
 const FeedPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"posts" | "videos">("posts");
   const [showNotifications, setShowNotifications] = useState(false);
