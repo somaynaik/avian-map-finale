@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play } from "lucide-react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -49,33 +49,36 @@ const FeedPage = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <div className="sticky top-0 z-10 border-b border-border bg-background/80 px-4 pb-3 pt-12 backdrop-blur-xl">
-        <h1 className="font-display text-2xl font-bold">Avian Map</h1>
-        <p className="text-sm text-muted-foreground">Unleash The Birdwatcher Within You...</p>
-      </div>
+      {/* Sticky Header and Tab Selector */}
+      <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl">
+        <div className="px-4 pb-3 pt-12">
+          <h1 className="font-display text-2xl font-bold">Avian Map</h1>
+          <p className="text-sm text-muted-foreground">Unleash The Birdwatcher Within You...</p>
+        </div>
 
-      {/* Swipe Navigation Header */}
-      <div className="flex border-b border-border bg-background/95 sticky top-[93px] z-10">
-        <button
-          onClick={() => setActiveTab("posts")}
-          className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 transition-all ${
-            activeTab === "posts"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Posts
-        </button>
-        <button
-          onClick={() => setActiveTab("videos")}
-          className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 transition-all ${
-            activeTab === "videos"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Videos
-        </button>
+        {/* Swipe Navigation Header */}
+        <div className="flex border-t border-border">
+          <button
+            onClick={() => setActiveTab("posts")}
+            className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 transition-all ${
+              activeTab === "posts"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Posts
+          </button>
+          <button
+            onClick={() => setActiveTab("videos")}
+            className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 transition-all ${
+              activeTab === "videos"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Videos
+          </button>
+        </div>
       </div>
 
       <div className="relative overflow-hidden w-full mt-2">
@@ -139,9 +142,9 @@ const FeedPage = () => {
                   setActiveTab("posts");
                 }
               }}
-              className="w-full touch-pan-y"
+              className="w-full"
             >
-              <div className="mx-auto max-w-lg">
+              <div className="mx-auto max-w-md px-2">
                 {videoPosts.length === 0 ? (
                   <div className="px-4 py-12 text-center">
                     <p className="text-lg font-semibold">No videos yet</p>
@@ -150,16 +153,18 @@ const FeedPage = () => {
                     </p>
                   </div>
                 ) : (
-                  videoPosts.map((video) => (
-                    <VideoCard
-                      key={video.id}
-                      video={video}
-                      onToggleLike={() =>
-                        likeMutation.mutate({ postId: video.id, liked: video.liked_by_me })
-                      }
-                      isPending={likeMutation.isPending}
-                    />
-                  ))
+                  <div className="h-[calc(100vh-220px)] overflow-y-scroll snap-y snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex flex-col gap-4 rounded-2xl pb-6">
+                    {videoPosts.map((video) => (
+                      <VideoCard
+                        key={video.id}
+                        video={video}
+                        onToggleLike={() =>
+                          likeMutation.mutate({ postId: video.id, liked: video.liked_by_me })
+                        }
+                        isPending={likeMutation.isPending}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -299,77 +304,121 @@ const VideoCard = ({
   const [showComments, setShowComments] = useState(false);
 
   return (
-    <div className="border-b border-border">
-      <div className="flex items-center gap-3 px-4 pb-3 pt-4">
-        <Avatar className="h-11 w-11 border border-border">
-          <AvatarImage src={video.author?.avatar_url || undefined} alt={authorName} />
-          <AvatarFallback>{getInitials(video.author)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{authorName}</p>
-          <p className="truncate text-xs text-muted-foreground">@{video.author?.username || "user"}</p>
-          {video.location_name && (
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
-              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-              <span className="truncate">{video.location_name}</span>
-            </div>
-          )}
+    <div className="snap-start shrink-0 h-full w-full relative flex items-center justify-center bg-black overflow-hidden rounded-2xl border border-border">
+      {/* Video Player */}
+      <video
+        src={video.video_url || video.image_url}
+        controls
+        playsInline
+        loop
+        className="h-full w-full object-contain bg-black"
+      />
+
+      {/* Gradient Overlay for Readability */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none z-10" />
+
+      {/* Right Sidebar Actions */}
+      <div className="absolute right-4 bottom-20 flex flex-col items-center gap-6 z-20 text-white">
+        {/* Profile Avatar */}
+        <div
+          className="cursor-pointer group flex flex-col items-center"
+          onClick={() => navigate(`/users/${video.author_id}`)}
+        >
+          <Avatar className="h-10 w-10 border-2 border-white shadow-lg transition-transform group-hover:scale-105">
+            <AvatarImage src={video.author?.avatar_url || undefined} alt={authorName} />
+            <AvatarFallback className="text-black bg-white">{getInitials(video.author)}</AvatarFallback>
+          </Avatar>
         </div>
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(video.created_at)}</span>
+
+        {/* Like Button */}
+        <div className="flex flex-col items-center">
+          <button
+            onClick={onToggleLike}
+            disabled={isPending}
+            className={`p-3 rounded-full bg-black/40 hover:bg-black/60 transition-colors shadow-md backdrop-blur-sm ${
+              video.liked_by_me ? "text-destructive" : "text-white"
+            }`}
+          >
+            <Heart className={`h-6 w-6 ${video.liked_by_me ? "fill-current" : ""}`} />
+          </button>
+          <span className="text-[11px] font-bold mt-1 drop-shadow-md">{video.likes_count}</span>
+        </div>
+
+        {/* Comment Button */}
+        <div className="flex flex-col items-center">
+          <button
+            onClick={() => setShowComments(!showComments)}
+            className={`p-3 rounded-full bg-black/40 hover:bg-black/60 transition-colors shadow-md backdrop-blur-sm ${
+              showComments ? "text-primary" : "text-white"
+            }`}
+          >
+            <MessageCircle className="h-6 w-6" />
+          </button>
+          <span className="text-[11px] font-bold mt-1 drop-shadow-md">Comment</span>
+        </div>
+
+        {/* Share Button */}
+        <div className="flex flex-col items-center">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/posts/${video.id}`);
+              toast({
+                title: "Link copied!",
+                description: "Sighting link copied to clipboard.",
+              });
+            }}
+            className="p-3 rounded-full bg-black/40 hover:bg-black/60 transition-colors shadow-md backdrop-blur-sm text-white"
+          >
+            <Share2 className="h-6 w-6" />
+          </button>
+          <span className="text-[11px] font-bold mt-1 drop-shadow-md">Share</span>
+        </div>
       </div>
 
-      <div className="relative aspect-[4/3] overflow-hidden bg-muted flex items-center justify-center">
-        <video 
-          src={video.video_url || video.image_url} 
-          controls 
-          playsInline 
-          loop 
-          className="h-full w-full object-cover" 
-        />
-        <div className="absolute left-3 top-3 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground pointer-events-none flex items-center gap-1.5 shadow-sm">
+      {/* Bottom Info Overlay */}
+      <div className="absolute left-4 bottom-4 right-16 flex flex-col gap-1.5 z-20 text-white text-left drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pointer-events-auto">
+        {/* Author Details */}
+        <div className="flex items-center gap-2">
+          <span
+            onClick={() => navigate(`/users/${video.author_id}`)}
+            className="font-bold hover:underline cursor-pointer text-sm sm:text-base"
+          >
+            @{video.author?.username || "user"}
+          </span>
+          <span className="text-xs opacity-75">•</span>
+          <span className="text-xs opacity-75">{formatRelativeTime(video.created_at)}</span>
+        </div>
+
+        {/* Location Pin */}
+        {video.location_name && (
+          <div className="flex items-center gap-1 text-xs opacity-90">
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-primary fill-current" />
+            <span className="truncate">{video.location_name}</span>
+          </div>
+        )}
+
+        {/* Species Name Badge */}
+        <div className="inline-flex items-center gap-1.5 bg-primary/90 text-primary-foreground text-xs font-bold px-2.5 py-1 rounded-full w-fit">
           <Play className="h-3 w-3 fill-current" />
           {video.species_name}
         </div>
-      </div>
 
-      <div className="space-y-3 p-4">
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={isPending}
-            onClick={onToggleLike}
-            className="px-0"
-          >
-            <Heart
-              className={video.liked_by_me ? "fill-destructive text-destructive" : ""}
-            />
-            <span>{video.likes_count}</span>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowComments(!showComments)}
-            className="px-0"
-          >
-            <MessageCircle className={`h-4 w-4 ${showComments ? "text-primary" : "text-muted-foreground"}`} />
-            <span>Comment</span>
-          </Button>
-          <Share2 className="ml-auto h-4 w-4 text-muted-foreground" />
-        </div>
+        {/* Note */}
+        {video.note && (
+          <p className="text-xs sm:text-sm line-clamp-2 leading-relaxed opacity-95">
+            {video.note}
+          </p>
+        )}
 
-        {video.note && <p className="text-sm leading-6">{video.note}</p>}
-
+        {/* Tagged companions */}
         {video.tagged_profiles && video.tagged_profiles.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground mt-1">
-            <span className="font-semibold text-muted-foreground/80">Tagged:</span>
+          <div className="flex flex-wrap items-center gap-1 text-[11px] opacity-90 font-semibold">
+            <span>Tagged:</span>
             {video.tagged_profiles.map((p, idx) => (
               <span
                 key={p.id}
                 onClick={() => navigate(`/users/${p.id}`)}
-                className="text-primary hover:underline cursor-pointer font-medium"
+                className="text-primary hover:underline cursor-pointer font-medium ml-0.5"
               >
                 @{p.username}
                 {idx < video.tagged_profiles.length - 1 ? ", " : ""}
@@ -379,16 +428,23 @@ const VideoCard = ({
         )}
       </div>
 
+      {/* Slide-up Comments Drawer */}
       <AnimatePresence>
         {showComments && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <CommentsSection postId={video.id} />
-          </motion.div>
+          <div className="absolute inset-0 bg-background/95 backdrop-blur-md z-30 flex flex-col rounded-2xl animate-in slide-in-from-bottom duration-300 text-foreground">
+            <div className="flex items-center justify-between border-b border-border p-3">
+              <h3 className="font-bold text-sm">Comments</h3>
+              <button
+                onClick={() => setShowComments(false)}
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <CommentsSection postId={video.id} />
+            </div>
+          </div>
         )}
       </AnimatePresence>
     </div>
