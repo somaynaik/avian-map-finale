@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -675,6 +675,33 @@ export const VideoCard = ({
   const authorName = video.author?.full_name || video.author?.username || "Unknown birder";
   const [showComments, setShowComments] = useState(false);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Auto-pause video when it scrolls out of viewport visibility threshold
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          videoEl.pause();
+        }
+      },
+      {
+        threshold: 0.4
+      }
+    );
+
+    observer.observe(videoEl);
+
+    return () => {
+      if (videoEl) {
+        observer.unobserve(videoEl);
+      }
+    };
+  }, []);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editSpecies, setEditSpecies] = useState(video.species_name);
   const [editLocation, setEditLocation] = useState(video.location_name || "");
@@ -741,6 +768,7 @@ export const VideoCard = ({
     <div className="snap-start shrink-0 h-full w-full relative flex items-center justify-center bg-black overflow-hidden rounded-2xl border border-border">
       {/* Video Player */}
       <video
+        ref={videoRef}
         src={video.video_url || video.image_url}
         controls
         playsInline
