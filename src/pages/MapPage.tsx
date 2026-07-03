@@ -1127,8 +1127,6 @@ const MapPage = () => {
           </AnimatePresence>
         </div>
       )}
-        </div>
-      )}
 
       {/* Selected Sighting Detail & Navigation Card */}
       {selectedSighting && !isNavigating && (
