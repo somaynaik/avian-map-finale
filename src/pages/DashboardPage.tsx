@@ -224,32 +224,38 @@ export const DashboardPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20 print:pb-0 print:bg-white text-foreground">
-      {/* Dashboard Print Header styling container */}
-      <div className="mx-auto max-w-7xl px-4 py-8 print:p-0 print:max-w-full">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6 mb-8 print:mb-4">
+    <div className="min-h-screen bg-background pb-28 print:pb-0 print:bg-white text-foreground">
+      {/* Sticky Header matching other pages */}
+      <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl print:hidden">
+        <div className="mx-auto max-w-7xl px-4 pb-3 pt-12 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl font-extrabold tracking-tight">Birds Arrived This Week</h1>
-            <p className="text-sm text-muted-foreground mt-1 print:text-black">
-              Overview of birds that have arrived in the last 7 days.
-            </p>
+            <h1 className="font-display text-2xl font-bold">Avian Analytics</h1>
+            <p className="text-sm text-muted-foreground">Overview of weekly local bird arrivals</p>
           </div>
-          <div className="flex items-center gap-2 print:hidden">
-            <div className="flex items-center gap-1.5 border border-border bg-card px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 border border-border bg-card px-3 py-1.5 rounded-xl text-xs font-semibold shadow-sm">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
               <span>{dateRangeStr}</span>
             </div>
             <Button
               onClick={handlePrint}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md flex items-center gap-1.5"
+              className="bg-primary hover:bg-primary/95 text-primary-foreground rounded-xl shadow-md flex items-center gap-1.5 h-9 text-xs font-semibold"
             >
-              <Printer className="h-4 w-4" />
+              <Printer className="h-3.5 w-3.5" />
               Print Report
             </Button>
           </div>
         </div>
+      </div>
 
+      {/* Print only header */}
+      <div className="hidden print:block p-6 border-b border-black mb-6">
+        <h1 className="font-display text-2xl font-bold text-black">Birds Arrived This Week</h1>
+        <p className="text-sm text-black mt-1">Overview of weekly local bird arrivals ({dateRangeStr})</p>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="mx-auto max-w-7xl px-4 py-6 print:p-0 print:max-w-full">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mb-3" />
@@ -261,13 +267,13 @@ export const DashboardPage = () => {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Total Arrivals Card */}
               <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-2xl">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-2xl">
                   🐦
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block font-medium uppercase tracking-wider">Total Arrived</span>
                   <span className="text-2xl font-bold block mt-0.5">{stats.totalBirds}</span>
-                  <span className="text-[10px] text-green-500 font-semibold flex items-center gap-0.5 mt-0.5">
+                  <span className="text-[10px] text-primary font-semibold flex items-center gap-0.5 mt-0.5">
                     <TrendingUp className="h-3 w-3" /> +14% vs last week
                   </span>
                 </div>
@@ -275,13 +281,13 @@ export const DashboardPage = () => {
 
               {/* Species Count Card */}
               <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-green-500/10 text-green-600 flex items-center justify-center text-2xl">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-2xl">
                   🌿
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block font-medium uppercase tracking-wider">Species</span>
                   <span className="text-2xl font-bold block mt-0.5">{stats.uniqueSpecies}</span>
-                  <span className="text-[10px] text-green-500 font-semibold flex items-center gap-0.5 mt-0.5">
+                  <span className="text-[10px] text-primary font-semibold flex items-center gap-0.5 mt-0.5">
                     <TrendingUp className="h-3 w-3" /> +20% vs last week
                   </span>
                 </div>
@@ -289,7 +295,7 @@ export const DashboardPage = () => {
 
               {/* Average Distance Card */}
               <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-2xl">
+                <div className="h-12 w-12 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center text-2xl">
                   📍
                 </div>
                 <div>
@@ -301,7 +307,7 @@ export const DashboardPage = () => {
 
               {/* Most Arrivals Card */}
               <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center text-2xl">
+                <div className="h-12 w-12 rounded-xl bg-accent/15 text-accent-foreground flex items-center justify-center text-2xl">
                   📅
                 </div>
                 <div>
@@ -318,11 +324,11 @@ export const DashboardPage = () => {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* Left Column: List table */}
-              <div className="bg-card border border-border rounded-3xl p-5 shadow-sm lg:col-span-7 space-y-4">
+              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm lg:col-span-7 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h2 className="font-semibold text-lg">Birds Arrived</h2>
-                    <span className="text-xs bg-blue-600/10 text-blue-600 font-bold px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
                       {stats.uniqueSpecies} Species
                     </span>
                   </div>
@@ -372,7 +378,7 @@ export const DashboardPage = () => {
                         {filteredSightings.slice(0, 10).map((s) => (
                           <tr key={s.obsDt + s.speciesCode} className="hover:bg-muted/40 transition-colors group">
                             <td className="py-3.5 flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-full bg-blue-500/10 flex items-center justify-center text-base shadow-sm shrink-0 border border-border">
+                              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-base shadow-sm shrink-0 border border-border">
                                 🐦
                               </div>
                               <span className="font-semibold text-foreground">{s.comName}</span>
@@ -381,7 +387,7 @@ export const DashboardPage = () => {
                             <td className="py-3.5 text-xs font-medium">
                               {new Date(s.obsDt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                             </td>
-                            <td className="py-3.5 text-right font-semibold text-xs text-blue-600 group-hover:translate-x-[-2px] transition-transform">
+                            <td className="py-3.5 text-right font-semibold text-xs text-primary group-hover:translate-x-[-2px] transition-transform">
                               📍 {Math.round(s.distanceKm)} km
                             </td>
                           </tr>
@@ -396,11 +402,11 @@ export const DashboardPage = () => {
               <div className="lg:col-span-5 space-y-6">
                 
                 {/* Distance Map diagram */}
-                <div className="bg-card border border-border rounded-3xl p-5 shadow-sm space-y-4">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
                   <div className="flex justify-between items-center">
                     <h2 className="font-semibold text-sm">Distance from Your Location</h2>
                     <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-blue-500" /> Current Coordinates
+                      <MapPin className="h-3 w-3 text-primary" /> Current Coordinates
                     </span>
                   </div>
 
@@ -415,17 +421,17 @@ export const DashboardPage = () => {
                           y1="50%"
                           x2={`calc(50% + ${item.x}px)`}
                           y2={`calc(50% + ${item.y}px)`}
-                          stroke="#3b82f6"
+                          stroke="currentColor"
                           strokeWidth="1.5"
                           strokeDasharray="4 4"
-                          opacity="0.6"
+                          className="text-primary/40"
                         />
                       ))}
                     </svg>
 
                     {/* Central Home Node */}
                     <div className="absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-10">
-                      <div className="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
+                      <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
                         🏠
                       </div>
                     </div>
@@ -447,7 +453,7 @@ export const DashboardPage = () => {
                           }}
                         >
                           <div className="flex flex-col items-center group cursor-pointer">
-                            <div className="h-8 w-8 rounded-full bg-white dark:bg-card border-2 border-blue-500 shadow-md flex items-center justify-center text-sm hover:scale-110 transition-transform">
+                            <div className="h-8 w-8 rounded-full bg-white dark:bg-card border-2 border-primary shadow-md flex items-center justify-center text-sm hover:scale-110 transition-transform">
                               🐦
                             </div>
                             <span className="bg-card/90 border border-border text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm text-foreground mt-1 whitespace-nowrap">
@@ -461,7 +467,7 @@ export const DashboardPage = () => {
                 </div>
 
                 {/* Arrivals Over the Week Chart */}
-                <div className="bg-card border border-border rounded-3xl p-5 shadow-sm space-y-4">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
                   <div className="flex justify-between items-center">
                     <h2 className="font-semibold text-sm">Arrivals Over the Week</h2>
                     <span className="text-[10px] text-muted-foreground font-semibold">Weekly Activity Trend</span>
@@ -472,8 +478,8 @@ export const DashboardPage = () => {
                     <svg viewBox="0 0 500 150" className="w-full overflow-visible">
                       <defs>
                         <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                          <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
                         </linearGradient>
                       </defs>
 
@@ -490,13 +496,13 @@ export const DashboardPage = () => {
 
                       {/* Main Trend Line */}
                       {chartPath.line && (
-                        <path d={chartPath.line} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" className="transition-all duration-500" />
+                        <path d={chartPath.line} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-primary transition-all duration-500" />
                       )}
 
                       {/* Plot Points and labels */}
                       {chartPath.points.map((p, idx) => (
                         <g key={idx}>
-                          <circle cx={p.x} cy={p.y} r="5" fill="#ffffff" stroke="#3b82f6" strokeWidth="2.5" className="hover:r-7 transition-all duration-200 cursor-pointer" />
+                          <circle cx={p.x} cy={p.y} r="5" fill="#ffffff" stroke="currentColor" strokeWidth="2.5" className="text-primary hover:r-7 transition-all duration-200 cursor-pointer" />
                           {/* Dot label */}
                           <text
                             x={p.x}
