@@ -35,6 +35,89 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * c;
 }
 
+const BIRD_IMAGE_CACHE: Record<string, string> = {};
+
+export const BirdImage = ({ 
+  scientificName, 
+  commonName, 
+  className = "h-9 w-9 rounded-full" 
+}: { 
+  scientificName?: string; 
+  commonName: string; 
+  className?: string; 
+}) => {
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!scientificName) {
+      setLoading(false);
+      return;
+    }
+
+    const cacheKey = scientificName.toLowerCase().trim();
+    if (BIRD_IMAGE_CACHE[cacheKey]) {
+      setImgUrl(BIRD_IMAGE_CACHE[cacheKey]);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchImage = async () => {
+      try {
+        const formattedName = scientificName
+          .split(" ")
+          .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+          .join("_");
+
+        const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(formattedName)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.thumbnail && data.thumbnail.source) {
+            const url = data.thumbnail.source;
+            BIRD_IMAGE_CACHE[cacheKey] = url;
+            if (isMounted) setImgUrl(url);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching bird image from Wikipedia:", error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchImage();
+    return () => {
+      isMounted = false;
+    };
+  }, [scientificName]);
+
+  if (loading) {
+    return (
+      <div className={`${className} bg-primary/10 flex items-center justify-center animate-pulse border border-border shrink-0`}>
+        <span className="text-[10px]">⏳</span>
+      </div>
+    );
+  }
+
+  if (imgUrl) {
+    return (
+      <img 
+        src={imgUrl} 
+        alt={commonName} 
+        className={`${className} object-cover border border-border shadow-sm shrink-0`} 
+        onError={() => setImgUrl(null)}
+      />
+    );
+  }
+
+  return (
+    <div className={`${className} bg-primary/10 flex items-center justify-center text-base border border-border shadow-sm shrink-0`}>
+      🐦
+    </div>
+  );
+};
+
 export const DashboardPage = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -402,9 +485,7 @@ export const DashboardPage = () => {
                         {filteredSightings.slice(0, 10).map((s) => (
                           <tr key={s.obsDt + s.speciesCode} className="hover:bg-muted/40 transition-colors group">
                             <td className="py-3.5 flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-base shadow-sm shrink-0 border border-border">
-                                🐦
-                              </div>
+                              <BirdImage scientificName={s.sciName} commonName={s.comName} className="h-9 w-9 rounded-full" />
                               <span className="font-semibold text-foreground">{s.comName}</span>
                             </td>
                             <td className="py-3.5 text-muted-foreground italic text-xs">{s.sciName || "N/A"}</td>
@@ -480,9 +561,11 @@ export const DashboardPage = () => {
                           }}
                         >
                           <div className="flex flex-col items-center group cursor-pointer">
-                            <div className="h-8 w-8 rounded-full bg-white dark:bg-card border-2 border-primary shadow-md flex items-center justify-center text-sm hover:scale-110 transition-transform">
-                              🐦
-                            </div>
+                            <BirdImage 
+                              scientificName={item.sciName} 
+                              commonName={item.comName} 
+                              className="h-8 w-8 rounded-full border-2 border-primary shadow-md hover:scale-110 transition-transform" 
+                            />
                             <span className="bg-card/90 border border-border text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm text-foreground mt-1 whitespace-nowrap">
                               {item.distanceStr}
                             </span>
