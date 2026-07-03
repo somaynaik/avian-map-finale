@@ -919,7 +919,6 @@ const MapPage = () => {
                   )}
                 </AnimatePresence>
               </div>
-            </div>
 
             {/* Sightings List */}
             <div className="flex-1 overflow-y-auto">
