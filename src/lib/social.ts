@@ -742,3 +742,130 @@ export async function markConversationRead(conversationId: string, userId: strin
 
   if (error) throw error;
 }
+
+export type InAppNotification = {
+  id: string;
+  type: "follow" | "like" | "comment";
+  actor_id: string;
+  actor_username: string;
+  actor_avatar_url: string | null;
+  post_id?: string;
+  post_species_name?: string;
+  body?: string;
+  created_at: string;
+};
+
+export async function listNotifications(myUserId: string): Promise<InAppNotification[]> {
+  const { data: myPosts, error: postsError } = await supabase
+    .from("posts")
+    .select("id, species_name")
+    .eq("author_id", myUserId);
+
+  if (postsError) throw postsError;
+
+  const myPostIds = (myPosts || []).map(p => p.id);
+  const postMap = new Map((myPosts || []).map(p => [p.id, p.species_name]));
+
+  const [
+    { data: follows, error: followsError },
+    { data: likes, error: likesError },
+    { data: comments, error: commentsError }
+  ] = await Promise.all([
+    supabase
+      .from("follows")
+      .select("follower_id, created_at")
+      .eq("following_id", myUserId),
+    myPostIds.length > 0
+      ? supabase
+          .from("post_likes")
+          .select("post_id, user_id, created_at")
+          .in("post_id", myPostIds)
+      : Promise.resolve({ data: [], error: null }),
+    myPostIds.length > 0
+      ? supabase
+          .from("post_comments")
+          .select("id, post_id, author_id, body, created_at")
+          .in("post_id", myPostIds)
+      : Promise.resolve({ data: [], error: null })
+  ]);
+
+  if (followsError) throw followsError;
+  if (likesError) throw likesError;
+  if (commentsError) throw commentsError;
+
+  const actorIds = new Set<string>();
+  (follows || []).forEach(f => actorIds.add(f.follower_id));
+  (likes || []).forEach(l => {
+    if (l.user_id !== myUserId) {
+      actorIds.add(l.user_id);
+    }
+  });
+  (comments || []).forEach(c => {
+    if (c.author_id !== myUserId) {
+      actorIds.add(c.author_id);
+    }
+  });
+
+  const uniqueActorIds = Array.from(actorIds);
+  let profileMap = new Map<string, Profile>();
+
+  if (uniqueActorIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("*")
+      .in("id", uniqueActorIds);
+    if (profilesError) throw profilesError;
+    profileMap = new Map((profiles || []).map(p => [p.id, p as Profile]));
+  }
+
+  const notifications: InAppNotification[] = [];
+
+  (follows || []).forEach(f => {
+    if (f.follower_id === myUserId) return;
+    const actor = profileMap.get(f.follower_id);
+    if (!actor) return;
+    notifications.push({
+      id: `follow-${f.follower_id}-${f.created_at}`,
+      type: "follow",
+      actor_id: f.follower_id,
+      actor_username: actor.username,
+      actor_avatar_url: actor.avatar_url,
+      created_at: f.created_at
+    });
+  });
+
+  (likes || []).forEach(l => {
+    if (l.user_id === myUserId) return;
+    const actor = profileMap.get(l.user_id);
+    if (!actor) return;
+    notifications.push({
+      id: `like-${l.user_id}-${l.post_id}-${l.created_at}`,
+      type: "like",
+      actor_id: l.user_id,
+      actor_username: actor.username,
+      actor_avatar_url: actor.avatar_url,
+      post_id: l.post_id,
+      post_species_name: postMap.get(l.post_id),
+      created_at: l.created_at
+    });
+  });
+
+  (comments || []).forEach(c => {
+    if (c.author_id === myUserId) return;
+    const actor = profileMap.get(c.author_id);
+    if (!actor) return;
+    notifications.push({
+      id: `comment-${c.id}`,
+      type: "comment",
+      actor_id: c.author_id,
+      actor_username: actor.username,
+      actor_avatar_url: actor.avatar_url,
+      post_id: c.post_id,
+      post_species_name: postMap.get(c.post_id),
+      body: c.body,
+      created_at: c.created_at
+    });
+  });
+
+  return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}

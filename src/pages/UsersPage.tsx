@@ -43,7 +43,7 @@ const UsersPage = () => {
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 border-b border-border bg-background/80 px-4 pb-3 pt-12 backdrop-blur-xl">
         <h1 className="font-display text-2xl font-bold">Birdwatchers</h1>
-        <p className="text-sm text-muted-foreground">Search real accounts and start conversations</p>
+        <p className="text-sm text-muted-foreground">Fellow Avian Enthusiasts</p>
       </div>
 
       <div className="mx-auto max-w-lg px-4 py-3">

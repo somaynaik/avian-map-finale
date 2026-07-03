@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X } from "lucide-react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { formatRelativeTime, getInitials, listFeedPosts, togglePostLike, listPostComments, createPostComment, type FeedPost } from "@/lib/social";
+import { formatRelativeTime, getInitials, listFeedPosts, togglePostLike, listPostComments, createPostComment, listNotifications, type FeedPost } from "@/lib/social";
 
 
 
@@ -22,6 +22,28 @@ const FeedPage = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"posts" | "videos">("posts");
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [lastViewed, setLastViewed] = useState<string | null>(() =>
+    localStorage.getItem(`last_viewed_notifications_${user?.id}`)
+  );
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ["notifications", user?.id],
+    queryFn: () => listNotifications(user!.id),
+    enabled: !!user?.id,
+    refetchInterval: 15000,
+  });
+
+  const unreadCount = lastViewed
+    ? notifications.filter((n) => new Date(n.created_at).getTime() > new Date(lastViewed).getTime()).length
+    : notifications.length;
+
+  const handleOpenNotifications = () => {
+    setShowNotifications(true);
+    const now = new Date().toISOString();
+    localStorage.setItem(`last_viewed_notifications_${user?.id}`, now);
+    setLastViewed(now);
+  };
 
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["feed", user?.id],
@@ -51,9 +73,22 @@ const FeedPage = () => {
     <div className="min-h-screen bg-background pb-24">
       {/* Sticky Header and Tab Selector */}
       <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="px-4 pb-3 pt-12">
-          <h1 className="font-display text-2xl font-bold">Avian Map</h1>
-          <p className="text-sm text-muted-foreground">Unleash The Birdwatcher Within You...</p>
+        <div className="px-4 pb-3 pt-12 flex items-start justify-between">
+          <div>
+            <h1 className="font-display text-2xl font-bold">Avian Map</h1>
+            <p className="text-sm text-muted-foreground">Unleash The Birdwatcher Within You...</p>
+          </div>
+          <button
+            onClick={handleOpenNotifications}
+            className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors mt-1"
+          >
+            <Bell className="h-6 w-6" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white animate-pulse">
+                {unreadCount}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Swipe Navigation Header */}
@@ -171,6 +206,108 @@ const FeedPage = () => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Notifications Drawer */}
+      <AnimatePresence>
+        {showNotifications && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNotifications(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            
+            {/* Drawer Content */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 250 }}
+              className="relative w-full max-w-md h-full bg-background border-l border-border flex flex-col z-10 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-lg font-bold">Notifications</h2>
+                </div>
+                <button
+                  onClick={() => setShowNotifications(false)}
+                  className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto divide-y divide-border [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                {notifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground">
+                    <Bell className="h-12 w-12 opacity-25 mb-3" />
+                    <p className="text-sm font-semibold">All quiet here</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      We'll let you know when someone interacts with your posts or profile.
+                    </p>
+                  </div>
+                ) : (
+                  notifications.map((n) => (
+                    <div 
+                      key={n.id} 
+                      className="p-4 flex gap-3 hover:bg-muted/40 transition-colors text-left animate-in fade-in duration-200"
+                    >
+                      <Avatar 
+                        className="h-10 w-10 border border-border cursor-pointer shrink-0"
+                        onClick={() => {
+                          setShowNotifications(false);
+                          navigate(`/users/${n.actor_id}`);
+                        }}
+                      >
+                        <AvatarImage src={n.actor_avatar_url || undefined} />
+                        <AvatarFallback>{n.actor_username ? n.actor_username[0].toUpperCase() : "U"}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0 text-sm">
+                        <p className="leading-snug text-foreground">
+                          <span 
+                            onClick={() => {
+                              setShowNotifications(false);
+                              navigate(`/users/${n.actor_id}`);
+                            }}
+                            className="font-bold hover:underline cursor-pointer"
+                          >
+                            @{n.actor_username}
+                          </span>{" "}
+                          {n.type === "follow" && "started following you"}
+                          {n.type === "like" && (
+                            <>
+                              liked your observation{" "}
+                              <span className="font-semibold text-primary">
+                                {n.post_species_name || "sighting"}
+                              </span>
+                            </>
+                          )}
+                          {n.type === "comment" && (
+                            <>
+                              commented on your sighting{" "}
+                              <span className="font-semibold text-primary">
+                                {n.post_species_name || "sighting"}
+                              </span>
+                              : <span className="text-muted-foreground italic">"{n.body}"</span>
+                            </>
+                          )}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground block mt-1">
+                          {formatRelativeTime(n.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
