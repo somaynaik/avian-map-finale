@@ -106,6 +106,7 @@ const MapPage = () => {
   }, []);
   const [selectedSighting, setSelectedSighting] = useState<RecentObservation | null>(null);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [showWeatherDetails, setShowWeatherDetails] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -136,6 +137,102 @@ const MapPage = () => {
     queryFn: () => getRecentGeoTaggedPosts(48),
     refetchInterval: 2 * 60 * 1000, // refresh every 2 min
   });
+
+  // Fetch current weather updates via Open-Meteo
+  const { data: weatherData } = useQuery({
+    queryKey: ['weather', userLocation],
+    queryFn: async () => {
+      if (!userLocation) return null;
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${userLocation.lat}&longitude=${userLocation.lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`
+      );
+      if (!res.ok) throw new Error("Weather fetch failed");
+      const data = await res.json();
+      return data.current;
+    },
+    enabled: !!userLocation,
+    refetchInterval: 15 * 60 * 1000, // Refresh weather every 15 minutes
+  });
+
+  const weatherAnalysis = useMemo(() => {
+    if (!weatherData) return null;
+
+    const temp = weatherData.temperature_2m;
+    const humidity = weatherData.relative_humidity_2m;
+    const wind = weatherData.wind_speed_10m;
+    const code = weatherData.weather_code;
+
+    let desc = "Clear Sky";
+    let icon = "☀️";
+    
+    if (code === 0) { desc = "Clear Sky"; icon = "☀️"; }
+    else if (code >= 1 && code <= 3) { desc = "Partly Cloudy"; icon = "⛅"; }
+    else if (code === 45 || code === 48) { desc = "Foggy"; icon = "🌫️"; }
+    else if (code >= 51 && code <= 55) { desc = "Drizzle"; icon = "🌧️"; }
+    else if (code >= 61 && code <= 65) { desc = "Rainy"; icon = "🌧️"; }
+    else if (code >= 71 && code <= 77) { desc = "Snowy"; icon = "❄️"; }
+    else if (code >= 80 && code <= 82) { desc = "Showers"; icon = "🌦️"; }
+    else if (code >= 95 && code <= 99) { desc = "Thunderstorm"; icon = "⛈️"; }
+
+    let score = 100;
+    let reasons: string[] = [];
+
+    if (code >= 95) { score -= 60; reasons.push("Thunderstorm active"); }
+    else if (code >= 80 && code <= 82) { score -= 40; reasons.push("Rain showers active"); }
+    else if (code >= 61 && code <= 65) { score -= 45; reasons.push("Rain active"); }
+    else if (code === 45 || code === 48) { score -= 20; reasons.push("Low visibility (fog)"); }
+
+    if (temp > 33) { score -= 30; reasons.push("Extreme heat"); }
+    else if (temp > 28) { score -= 10; reasons.push("Warm temperature"); }
+    else if (temp < 10) { score -= 25; reasons.push("Cold temperature"); }
+
+    if (wind > 25) { score -= 25; reasons.push("High winds"); }
+    else if (wind > 15) { score -= 10; reasons.push("Breezy winds"); }
+
+    const hour = new Date().getHours();
+    const isMorning = hour >= 6 && hour <= 10;
+    const isEvening = hour >= 16 && hour <= 19;
+    if (!isMorning && !isEvening) {
+      score -= 15;
+      reasons.push("Mid-day low activity");
+    }
+
+    score = Math.max(0, score);
+
+    let rating = "Fair";
+    let color = "text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30";
+    let barColor = "bg-yellow-500";
+    if (score >= 80) {
+      rating = "Optimum";
+      color = "text-green-600 bg-green-50 dark:bg-green-950/30";
+      barColor = "bg-green-500";
+    } else if (score < 50) {
+      rating = "Not Recommended";
+      color = "text-destructive bg-destructive/10";
+      barColor = "bg-destructive";
+    }
+
+    let tip = "Perfect weather to spot local birds. Grab your binoculars!";
+    if (score < 50) {
+      tip = "Birds seek shelter during harsh weather. Better to wait it out.";
+    } else if (score < 80) {
+      tip = "Activity might be slower. Look near water bodies or sheltered trees.";
+    }
+
+    return {
+      temp,
+      humidity,
+      wind,
+      desc,
+      icon,
+      score,
+      rating,
+      color,
+      barColor,
+      reasons,
+      tip
+    };
+  }, [weatherData]);
 
   // Group sightings by species for the sidebar
   const groupedSightings = useMemo(() => {
@@ -853,6 +950,97 @@ const MapPage = () => {
       >
         <Locate className="w-5 h-5 text-primary-foreground" />
       </button>
+
+      {/* Floating Weather Suitability Widget */}
+      {weatherAnalysis && (
+        <div className="absolute top-24 right-4 z-10 flex flex-col items-end gap-2">
+          {/* Weather Toggle Button */}
+          <button
+            onClick={() => setShowWeatherDetails(!showWeatherDetails)}
+            className="flex items-center gap-2 px-3 py-2 bg-card/90 backdrop-blur-lg rounded-full shadow-lg border border-border hover:bg-muted transition-colors text-sm font-semibold"
+          >
+            <span className="text-lg">{weatherAnalysis.icon}</span>
+            <span>{weatherAnalysis.temp}°C</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
+              {weatherAnalysis.rating}
+            </span>
+          </button>
+
+          {/* Expanded Weather details */}
+          <AnimatePresence>
+            {showWeatherDetails && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="w-72 bg-card/95 backdrop-blur-md rounded-2xl shadow-xl border border-border p-4 text-left space-y-3"
+              >
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                  <span className="font-bold text-sm">Weather Info</span>
+                  <button
+                    onClick={() => setShowWeatherDetails(false)}
+                    className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-muted/40 p-2 rounded-xl">
+                    <span className="text-muted-foreground block text-[10px]">Conditions</span>
+                    <span className="font-semibold flex items-center gap-1 mt-0.5">
+                      <span>{weatherAnalysis.icon}</span>
+                      {weatherAnalysis.desc}
+                    </span>
+                  </div>
+                  <div className="bg-muted/40 p-2 rounded-xl">
+                    <span className="text-muted-foreground block text-[10px]">Temperature</span>
+                    <span className="font-semibold block mt-0.5">{weatherAnalysis.temp}°C</span>
+                  </div>
+                  <div className="bg-muted/40 p-2 rounded-xl">
+                    <span className="text-muted-foreground block text-[10px]">Wind Speed</span>
+                    <span className="font-semibold block mt-0.5">{weatherAnalysis.wind} km/h</span>
+                  </div>
+                  <div className="bg-muted/40 p-2 rounded-xl">
+                    <span className="text-muted-foreground block text-[10px]">Humidity</span>
+                    <span className="font-semibold block mt-0.5">{weatherAnalysis.humidity}%</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground">Birdwatching rating</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
+                      {weatherAnalysis.rating}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${weatherAnalysis.barColor} transition-all duration-500`}
+                      style={{ width: `${weatherAnalysis.score}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-primary/5 border border-primary/10 rounded-xl p-3 text-xs leading-relaxed text-foreground">
+                  <p className="font-bold text-primary flex items-center gap-1 mb-1">
+                    <span>💡 Recommendation</span>
+                  </p>
+                  <p>{weatherAnalysis.tip}</p>
+                  {weatherAnalysis.reasons.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5 text-muted-foreground pl-3.5 list-disc text-[10px]">
+                      {weatherAnalysis.reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
     </div>
   );
