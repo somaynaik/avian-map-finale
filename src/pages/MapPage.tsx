@@ -126,6 +126,8 @@ const MapPage = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const [isSidebarMinimized, setIsSidebarMinimized] = useState(true);
+
   // Continuous watchPosition location tracking when active navigation is enabled
   useEffect(() => {
     if (!isNavigating) return;
@@ -508,7 +510,7 @@ const MapPage = () => {
     fetchRoute();
   }, [selectedSighting, userLocation]);
 
-  // Add markers for bird sightings - SIMPLE AND VISIBLE
+  // Add markers for bird sightings - Grouped by location to prevent mobile clutter
   useEffect(() => {
     if (!map.current) return;
 
@@ -518,66 +520,101 @@ const MapPage = () => {
 
     if (!sightings.length) return;
 
-    console.log(`Creating ${sightings.length} markers`);
+    console.log(`Creating markers for ${sightings.length} sightings`);
 
-    // Add new markers
-    sightings.forEach((sighting) => {
-      const key = `${sighting.locId}-${sighting.speciesCode}-${sighting.obsDt}`;
+    // Group sightings by location coordinates to avoid piling multiple markers on the exact same coordinate
+    const groupedByLocation: Record<string, RecentObservation[]> = {};
+    sightings.forEach(sighting => {
+      const groupKey = sighting.locId || `${sighting.lat.toFixed(4)},${sighting.lng.toFixed(4)}`;
+      if (!groupedByLocation[groupKey]) {
+        groupedByLocation[groupKey] = [];
+      }
+      groupedByLocation[groupKey].push(sighting);
+    });
 
-      // Create simple, visible marker
+    // Add grouped markers
+    Object.entries(groupedByLocation).forEach(([locId, locSightings]) => {
+      const firstSighting = locSightings[0];
+      const count = locSightings.length;
+      const key = `loc-${locId}-${firstSighting.obsDt}`;
+
       const el = document.createElement("div");
+      
+      // Style marker. If multiple species are recorded here, show the count of species.
       el.style.cssText = `
-        width: 30px; 
-        height: 30px; 
+        width: 32px; 
+        height: 32px; 
         border-radius: 50%;
-        background: #3a7d52;
-        border: 3px solid white;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        background: #1F5D3B;
+        border: 2px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
         cursor: pointer;
         display: flex; 
         align-items: center; 
         justify-content: center;
-        font-size: 14px;
+        font-size: ${count > 1 ? '11px' : '14px'};
+        font-weight: bold;
+        color: white;
       `;
-      el.textContent = "🐦";
+      el.textContent = count > 1 ? `${count}` : "🐦";
       
-      el.addEventListener('click', () => setSelectedSighting(sighting));
+      el.addEventListener('click', () => {
+        setSelectedSighting(firstSighting);
+        if (isMobile) {
+          setIsSidebarMinimized(true); // collapse list when interacting with a marker
+        }
+      });
 
-      // Create popup
+      // Build scrollable list of species observed at this specific coordinate
+      const speciesListHtml = locSightings.slice(0, 5).map(s => `
+        <div style="margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; text-align: left;">
+          <strong style="font-size: 13px; color: #111827; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${s.comName}
+          </strong>
+          <span style="font-size: 11px; font-style: italic; color: #6b7280; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${s.sciName}
+          </span>
+          <span style="font-size: 10px; color: #9ca3af; display: block; margin-top: 1px;">
+            🕒 ${getTimeAgo(s.obsDt)}${s.howMany > 0 ? ` · ${s.howMany} spotted` : ''}
+          </span>
+        </div>
+      `).join('');
+
+      const remainingCount = count - 5;
+      const footerHtml = remainingCount > 0 
+        ? `<p style="margin: 4px 0 0 0; font-size: 11px; font-weight: 600; color: #1F5D3B; text-align: center;">+ ${remainingCount} more species here</p>`
+        : '';
+
       const popup = new maplibregl.Popup({
         offset: 25,
         closeButton: true,
         closeOnClick: false,
         maxWidth: '280px',
       }).setHTML(`
-        <div style="padding: 12px; font-family: system-ui, sans-serif;">
-          <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">
-            ${sighting.comName}
+        <div style="padding: 10px; font-family: system-ui, -apple-system, sans-serif; max-height: 250px; overflow-y: auto;">
+          <h3 style="margin: 0 0 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; text-align: left; border-bottom: 2px solid #1F5D3B; padding-bottom: 3px;">
+            📍 ${firstSighting.locName.split(',')[0]}
           </h3>
-          <p style="margin: 0 0 8px 0; font-size: 12px; font-style: italic; color: #666;">
-            ${sighting.sciName}
-          </p>
-          <div style="padding-top: 8px; border-top: 1px solid #e5e5e5;">
-            <p style="margin: 0 0 4px 0; font-size: 12px;">
-              📍 ${sighting.locName}
-            </p>
-            <p style="margin: 0; font-size: 11px; color: #666;">
-              🕒 ${getTimeAgo(sighting.obsDt)}${sighting.howMany > 0 ? ` · ${sighting.howMany} bird${sighting.howMany > 1 ? 's' : ''}` : ''}
-            </p>
+          <div style="display: flex; flex-direction: column;">
+            ${speciesListHtml}
           </div>
+          ${footerHtml}
         </div>
       `);
       
       popup.on('close', () => {
-        setSelectedSighting(current => current?.locId === sighting.locId ? null : current);
+        setSelectedSighting(current => {
+          if (!current) return null;
+          const isSameLoc = locSightings.some(ls => ls.locId === current.locId);
+          return isSameLoc ? null : current;
+        });
       });
 
-      // Create marker
       const marker = new maplibregl.Marker({ 
         element: el,
         anchor: 'center',
       })
-        .setLngLat([sighting.lng, sighting.lat])
+        .setLngLat([firstSighting.lng, firstSighting.lat])
         .setPopup(popup)
         .addTo(map.current!);
       
@@ -585,7 +622,7 @@ const MapPage = () => {
     });
 
     console.log(`Added ${markersRef.current.size} markers to map`);
-  }, [sightings]);
+  }, [sightings, isMobile]);
 
   // Add community post markers (orange, distinct from eBird green)
   useEffect(() => {
@@ -660,7 +697,7 @@ const MapPage = () => {
     });
   }, [communityPosts]);
 
-  // Filter markers visibility based on search
+  // Filter markers visibility based on search queries
   useEffect(() => {
     if (!searchQuery) {
       markersRef.current.forEach(marker => {
@@ -675,16 +712,27 @@ const MapPage = () => {
     }
 
     const searchLower = searchQuery.toLowerCase();
-    
-    sightings.forEach((sighting) => {
-      const key = `${sighting.locId}-${sighting.speciesCode}-${sighting.obsDt}`;
+
+    // Group the same way to match our compound coordinates keys
+    const groupedByLocation: Record<string, RecentObservation[]> = {};
+    sightings.forEach(sighting => {
+      const groupKey = sighting.locId || `${sighting.lat.toFixed(4)},${sighting.lng.toFixed(4)}`;
+      if (!groupedByLocation[groupKey]) {
+        groupedByLocation[groupKey] = [];
+      }
+      groupedByLocation[groupKey].push(sighting);
+    });
+
+    Object.entries(groupedByLocation).forEach(([locId, locSightings]) => {
+      const firstSighting = locSightings[0];
+      const key = `loc-${locId}-${firstSighting.obsDt}`;
       const marker = markersRef.current.get(key);
       
       if (marker) {
-        const matches = 
-          sighting.comName.toLowerCase().includes(searchLower) ||
-          sighting.sciName.toLowerCase().includes(searchLower);
-        
+        const matches = locSightings.some(s => 
+          s.comName.toLowerCase().includes(searchLower) ||
+          s.sciName.toLowerCase().includes(searchLower)
+        );
         const el = marker.getElement();
         el.style.display = matches ? 'flex' : 'none';
       }
@@ -728,19 +776,61 @@ const MapPage = () => {
             animate={{ x: 0, y: 0 }}
             exit={isMobile ? { y: "100%", x: 0 } : { x: -320, y: 0 }}
             transition={{ type: "spring", damping: 25 }}
-            className="absolute bottom-[75px] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 h-[45vh] md:h-auto bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none"
+            className={`absolute bottom-[75px] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none transition-all duration-300 ${
+              isMobile && isSidebarMinimized ? "h-[70px] overflow-hidden" : "h-[45vh]"
+            }`}
           >
+            {/* Pull / drag handle bar for mobile */}
+            {isMobile && (
+              <div 
+                onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
+                className="w-12 h-1 bg-muted-foreground/30 hover:bg-muted-foreground/50 rounded-full mx-auto mt-2.5 cursor-pointer shrink-0" 
+              />
+            )}
+            
             {/* Sidebar Header */}
-            <div className="p-4 border-b border-border">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display text-lg font-semibold">Recent Sightings</h2>
-                <button
-                  onClick={() => setShowSidebar(false)}
-                  className="p-1 hover:bg-muted rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+            <div 
+              className="p-4 pt-2 md:pt-4 border-b border-border flex flex-col cursor-pointer md:cursor-default shrink-0"
+              onClick={() => {
+                if (isMobile) {
+                  setIsSidebarMinimized(!isSidebarMinimized);
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="font-display text-lg font-semibold flex items-center gap-1">
+                  Recent Sightings
+                  {isMobile && (
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                      {isSidebarMinimized ? "(Tap to expand)" : "(Tap to collapse)"}
+                    </span>
+                  )}
+                </h2>
+                <div className="flex items-center gap-1">
+                  {/* Min/Max Chevron for Mobile */}
+                  {isMobile && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsSidebarMinimized(!isSidebarMinimized);
+                      }}
+                      className="p-1.5 hover:bg-muted rounded-lg transition-colors mr-0.5"
+                    >
+                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${isSidebarMinimized ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSidebar(false);
+                    }}
+                    className="p-1.5 hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
+            </div>
               
               {/* Region Filter - Custom Dropdown */}
               <div className="relative" ref={dropdownRef}>
