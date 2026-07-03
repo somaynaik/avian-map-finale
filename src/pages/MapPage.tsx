@@ -8,6 +8,8 @@ import { Geolocation } from "@capacitor/geolocation";
 import { getRecentObservations, getNearbyObservations, type RecentObservation } from "@/lib/ebird";
 import { getRecentGeoTaggedPosts, type GeoTaggedPost } from "@/lib/social";
 import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 // Indian states/regions for filtering
 const INDIAN_REGIONS = [
@@ -108,6 +110,14 @@ const MapPage = () => {
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [showWeatherDetails, setShowWeatherDetails] = useState(false);
 
+  // Active Navigation Guidance States
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [hasArrived, setHasArrived] = useState(false);
+  const [navigationSteps, setNavigationSteps] = useState<{instruction: string; distance: number; duration: number}[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
+  const [remainingDuration, setRemainingDuration] = useState<number | null>(null);
+
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -115,6 +125,69 @@ const MapPage = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Continuous watchPosition location tracking when active navigation is enabled
+  useEffect(() => {
+    if (!isNavigating) return;
+
+    let watchId: string;
+    const startWatching = async () => {
+      try {
+        watchId = await Geolocation.watchPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }, (position, err) => {
+          if (err) {
+            console.error("WatchPosition error:", err);
+            return;
+          }
+          if (position) {
+            const { latitude, longitude } = position.coords;
+            setUserLocation({ lat: latitude, lng: longitude });
+
+            // If navigating, we auto-follow user location on map
+            if (map.current) {
+              map.current.easeTo({
+                center: [longitude, latitude],
+                zoom: 17,
+                pitch: 50,
+                duration: 1000
+              });
+            }
+          }
+        });
+      } catch (error) {
+        console.error("Error setting up watchPosition:", error);
+      }
+    };
+
+    startWatching();
+
+    return () => {
+      if (watchId) {
+        Geolocation.clearWatch({ id: watchId });
+      }
+    };
+  }, [isNavigating]);
+
+  // Handle auto-arrival threshold check
+  useEffect(() => {
+    if (!isNavigating || !userLocation || !selectedSighting) return;
+
+    const distance = getDistance(
+      userLocation.lat,
+      userLocation.lng,
+      selectedSighting.lat,
+      selectedSighting.lng
+    );
+    setRemainingDistance(distance);
+    setRemainingDuration(Math.round(distance * 1.8));
+
+    if (distance <= 0.05) { // 50 meters
+      setHasArrived(true);
+    }
+  }, [userLocation, selectedSighting, isNavigating]);
 
   // Fetch bird sightings from eBird API
   const { data: sightings = [], isLoading } = useQuery({
@@ -342,7 +415,7 @@ const MapPage = () => {
       try {
         const { lng: startLng, lat: startLat } = userLocation;
         const { lng: endLng, lat: endLat } = selectedSighting;
-        const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+        const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`;
         
         const res = await fetch(url);
         const data = await res.json();
@@ -383,8 +456,19 @@ const MapPage = () => {
           }
 
           // Generate Route Info Label
-          const distanceKm = (route.distance / 1000).toFixed(1);
+          const distanceKm = Number((route.distance / 1000).toFixed(1));
           const durationMin = Math.round(route.duration / 60);
+          setRemainingDistance(distanceKm);
+          setRemainingDuration(durationMin);
+
+          const steps = route.legs?.[0]?.steps?.map((s: any) => ({
+            instruction: s.maneuver?.instruction || "Continue straight",
+            distance: s.distance,
+            duration: s.duration,
+          })) || [];
+          setNavigationSteps(steps);
+          setCurrentStepIndex(0);
+
           const timeString = durationMin > 60 
             ? `${Math.floor(durationMin / 60)} hr ${durationMin % 60} min` 
             : `${durationMin} min`;
@@ -920,7 +1004,8 @@ const MapPage = () => {
       )}
 
       {/* Top Search Bar */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 pt-12">
+      {!isNavigating && (
+        <div className="absolute top-0 left-0 right-0 z-10 p-4 pt-12">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-2 bg-card/90 backdrop-blur-lg rounded-full px-4 py-3 shadow-lg border border-border">
             <Search className="w-4 h-4 text-muted-foreground" />
@@ -942,6 +1027,7 @@ const MapPage = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Locate button */}
       <button 
@@ -952,7 +1038,7 @@ const MapPage = () => {
       </button>
 
       {/* Floating Weather Suitability Widget */}
-      {weatherAnalysis && (
+      {weatherAnalysis && !isNavigating && (
         <div className="absolute top-24 right-4 z-10 flex flex-col items-end gap-2">
           {/* Weather Toggle Button */}
           <button
@@ -1041,6 +1127,190 @@ const MapPage = () => {
           </AnimatePresence>
         </div>
       )}
+        </div>
+      )}
+
+      {/* Selected Sighting Detail & Navigation Card */}
+      {selectedSighting && !isNavigating && (
+        <div className="absolute bottom-24 left-4 right-4 md:left-auto md:w-96 z-20 bg-card/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-border p-4 animate-in slide-in-from-bottom duration-200">
+          <div className="flex justify-between items-start">
+            <div className="flex-1 min-w-0">
+              <span className="inline-block bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">
+                Selected Destination
+              </span>
+              <h3 className="font-semibold text-lg text-foreground truncate">{selectedSighting.comName}</h3>
+              <p className="text-xs text-muted-foreground italic truncate mt-0.5">{selectedSighting.sciName}</p>
+              
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+                <MapPin className="w-3.5 h-3.5" />
+                <span className="truncate">{selectedSighting.locName}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedSighting(null)}
+              className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {routePopupRef.current ? "Route calculated" : "Calculating route..."}
+            </div>
+            <Button
+              onClick={() => {
+                setIsNavigating(true);
+                setHasArrived(false);
+                // Center and pitch map
+                if (map.current && userLocation) {
+                  map.current.easeTo({
+                    center: [userLocation.lng, userLocation.lat],
+                    zoom: 17,
+                    pitch: 50,
+                    bearing: 0,
+                    duration: 1500
+                  });
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 flex items-center gap-1.5 shadow-md hover:scale-105 transition-transform"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" className="rotate-45"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              Start Guidance
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Active Navigation Guidance UI */}
+      {isNavigating && selectedSighting && (
+        <>
+          {/* Top Green Banner */}
+          <div className="absolute top-12 left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-top duration-300">
+            <div className="bg-green-600 dark:bg-green-700 text-white rounded-2xl p-4 shadow-xl border border-green-500/20 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-xl shrink-0 font-bold">
+                {navigationSteps[currentStepIndex]?.instruction.toLowerCase().includes("left") ? "⬅️" :
+                 navigationSteps[currentStepIndex]?.instruction.toLowerCase().includes("right") ? "➡️" : "⬆️"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-base leading-tight">
+                  {navigationSteps[currentStepIndex]?.instruction || "Continue to target destination"}
+                </p>
+                {navigationSteps[currentStepIndex] && (
+                  <p className="text-xs text-white/80 mt-0.5">
+                    In {Math.round(navigationSteps[currentStepIndex].distance)} meters
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Panel */}
+          <div className="absolute bottom-24 left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-bottom duration-300">
+            <div className="bg-card/95 backdrop-blur-lg border border-border rounded-3xl p-4 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold text-blue-600">
+                      {remainingDuration !== null 
+                        ? (remainingDuration > 60 ? `${Math.floor(remainingDuration / 60)} hr ${remainingDuration % 60} min` : `${remainingDuration} min`)
+                        : routePopupRef.current ? "Calculating..." : "Calculated"}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      ({remainingDistance !== null ? remainingDistance.toFixed(1) : "..."} km)
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Target: {selectedSighting.comName}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      if (currentStepIndex < navigationSteps.length - 1) {
+                        setCurrentStepIndex(prev => prev + 1);
+                      } else {
+                        setHasArrived(true);
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full text-xs"
+                  >
+                    Next Step
+                  </Button>
+                  <Button
+                    onClick={() => setHasArrived(true)}
+                    className="bg-green-600 hover:bg-green-700 text-white rounded-full text-xs shadow-md"
+                  >
+                    Arrived
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    setIsNavigating(false);
+                    setHasArrived(false);
+                    setCurrentStepIndex(0);
+                    // Reset map pitch
+                    if (map.current) {
+                      map.current.easeTo({
+                        pitch: 0,
+                        zoom: 12,
+                        duration: 1000
+                      });
+                    }
+                  }}
+                  variant="destructive"
+                  className="w-full rounded-full font-bold shadow-md"
+                >
+                  End Guidance
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Arrival Celebratory Dialog */}
+      <Dialog open={hasArrived} onOpenChange={(open) => !open && setHasArrived(false)}>
+        <DialogContent className="max-w-md bg-background border-border text-center p-6 space-y-4">
+          <div className="mx-auto h-16 w-16 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center text-4xl animate-bounce">
+            🎉
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">You have arrived!</h2>
+            <p className="text-sm text-muted-foreground">
+              You are at <span className="font-semibold text-foreground">{selectedSighting?.locName}</span>.
+            </p>
+            <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-xl p-3 mt-2 leading-relaxed">
+              🐦 Keep your binoculars ready! Look out for the <span className="font-bold">{selectedSighting?.comName}</span> ({selectedSighting?.sciName}) nearby.
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              setIsNavigating(false);
+              setHasArrived(false);
+              setSelectedSighting(null);
+              setCurrentStepIndex(0);
+              // Reset map pitch
+              if (map.current) {
+                map.current.easeTo({
+                  pitch: 0,
+                  zoom: 12,
+                  duration: 1000
+                });
+              }
+            }}
+            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-md"
+          >
+            Finish Navigation
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
     </div>
   );
