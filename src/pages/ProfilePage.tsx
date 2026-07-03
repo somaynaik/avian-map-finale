@@ -294,14 +294,14 @@ const ProfilePage = () => {
                   <DropdownMenuItem onClick={() => setIsDiscoverCollapsed(!isDiscoverCollapsed)}>
                     {isDiscoverCollapsed ? "Show suggestions" : "Collapse suggestions"}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/users")}>
+                  <DropdownMenuItem onClick={() => navigate("/dashboard")}>
                     Search directory
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
             <button
-              onClick={() => navigate("/users")}
+              onClick={() => navigate("/dashboard")}
               className="text-xs font-semibold text-primary hover:underline"
             >
               See all

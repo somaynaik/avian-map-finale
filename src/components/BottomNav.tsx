@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Map, Newspaper, Camera, MessageCircle, Users, User } from "lucide-react";
+import { Map, Newspaper, Camera, MessageCircle, LayoutDashboard, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +10,7 @@ const tabs = [
   { path: "/feed", icon: Newspaper, label: "Feed" },
   { path: "/camera", icon: Camera, label: "Camera", isCenter: true },
   { path: "/messages", icon: MessageCircle, label: "Messages" },
-  { path: "/users", icon: Users, label: "Users" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/profile", icon: User, label: "Profile" },
 ];
 
