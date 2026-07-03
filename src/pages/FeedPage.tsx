@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell } from "lucide-react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -7,8 +7,29 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
-import { formatRelativeTime, getInitials, listFeedPosts, togglePostLike, listPostComments, createPostComment, listNotifications, type FeedPost } from "@/lib/social";
+import {
+  formatRelativeTime,
+  getInitials,
+  listFeedPosts,
+  togglePostLike,
+  listPostComments,
+  createPostComment,
+  listNotifications,
+  listUsers,
+  deletePost,
+  updatePost,
+  type FeedPost,
+} from "@/lib/social";
 
 
 
@@ -313,21 +334,75 @@ const FeedPage = () => {
   );
 };
 
-export const FeedCard = ({
-  post,
-  index,
-  onToggleLike,
-  isPending,
-}: {
-  post: FeedPost;
-  index: number;
-  onToggleLike: () => void;
-  isPending: boolean;
 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const isAuthor = user?.id === post.author_id;
   const authorName = post.author?.full_name || post.author?.username || "Unknown birder";
   const [showComments, setShowComments] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSpecies, setEditSpecies] = useState(post.species_name);
+  const [editLocation, setEditLocation] = useState(post.location_name || "");
+  const [editNote, setEditNote] = useState(post.note || "");
+  const [editTaggedUserIds, setEditTaggedUserIds] = useState<string[]>(
+    post.tagged_profiles?.map(p => p.id) || []
+  );
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["all-users-to-tag-edit", user?.id],
+    queryFn: () => listUsers(user!.id, ""),
+    enabled: !!user?.id && isEditing,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deletePost(post.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts"] });
+      toast({
+        title: "Post deleted",
+        description: "Your sighting has been removed successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not delete post",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: () => {
+      const notePayload = JSON.stringify({ body: editNote, tags: editTaggedUserIds });
+      return updatePost(post.id, {
+        species_name: editSpecies,
+        location_name: editLocation,
+        note: notePayload,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts"] });
+      setIsEditing(false);
+      toast({
+        title: "Post updated",
+        description: "Your sighting details have been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update post",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <motion.article
@@ -351,7 +426,26 @@ export const FeedCard = ({
             </div>
           )}
         </div>
-        <span className="text-xs text-muted-foreground">{formatRelativeTime(post.created_at)}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">{formatRelativeTime(post.created_at)}</span>
+          {isAuthor && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full shrink-0">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-background border border-border">
+                <DropdownMenuItem onClick={() => setIsEditing(true)} className="cursor-pointer">
+                  Edit post
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} className="cursor-pointer text-destructive focus:text-destructive font-medium">
+                  Delete post
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
 
       <div className="relative aspect-[4/3] overflow-hidden bg-muted flex items-center justify-center">
@@ -424,6 +518,134 @@ export const FeedCard = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Edit Post Sighting Modal */}
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent className="max-w-md bg-background border-border max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit sighting details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 text-left">
+            <div className="space-y-2">
+              <Label htmlFor="edit-species-name">Species name</Label>
+              <Input
+                id="edit-species-name"
+                value={editSpecies}
+                onChange={(event) => setEditSpecies(event.target.value)}
+                placeholder="Example: Indian Peafowl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-location-name">Location</Label>
+              <Input
+                id="edit-location-name"
+                value={editLocation}
+                onChange={(event) => setEditLocation(event.target.value)}
+                placeholder="Where did you see it?"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-note">Notes</Label>
+              <Textarea
+                id="edit-note"
+                value={editNote}
+                onChange={(event) => setEditNote(event.target.value)}
+                placeholder="Add context about the sighting"
+              />
+            </div>
+
+            {/* Tag companions */}
+            <div className="space-y-2">
+              <Label>Tag companions</Label>
+              <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 rounded-xl border border-border bg-card">
+                {editTaggedUserIds.length === 0 ? (
+                  <span className="text-xs text-muted-foreground self-center px-1">No companions tagged</span>
+                ) : (
+                  editTaggedUserIds.map(id => {
+                    const taggedUser = allUsers.find(u => u.id === id);
+                    if (!taggedUser) return null;
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1 rounded-full">
+                        @{taggedUser.username}
+                        <button
+                          type="button"
+                          onClick={() => setEditTaggedUserIds(prev => prev.filter(tid => tid !== id))}
+                          className="hover:text-destructive shrink-0 font-bold ml-0.5"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+              
+              <div className="rounded-2xl border border-border bg-card p-3 max-h-48 overflow-y-auto space-y-2">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-1">Select users to tag</p>
+                {allUsers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-1">No other users found</p>
+                ) : (
+                  <div className="space-y-1">
+                    {allUsers.map((u) => {
+                      const isTagged = editTaggedUserIds.includes(u.id);
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            if (isTagged) {
+                              setEditTaggedUserIds(prev => prev.filter(id => id !== u.id));
+                            } else {
+                              setEditTaggedUserIds(prev => [...prev, u.id]);
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors ${
+                            isTagged ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7">
+                              <AvatarImage src={u.avatar_url || undefined} />
+                              <AvatarFallback>{getInitials(u)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-xs font-semibold">{u.full_name || u.username}</p>
+                              <p className="text-[10px] text-muted-foreground">@{u.username}</p>
+                            </div>
+                          </div>
+                          <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${
+                            isTagged ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                          }`}>
+                            {isTagged && <span className="text-[9px] font-bold">✓</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              className="w-full mt-4"
+              disabled={editMutation.isPending || !editSpecies.trim()}
+              onClick={() => editMutation.mutate()}
+            >
+              {editMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving changes...
+                </>
+              ) : (
+                "Save changes"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.article>
   );
 };
@@ -437,9 +659,74 @@ export const VideoCard = ({
   onToggleLike: () => void;
   isPending: boolean;
 }) => {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const isAuthor = user?.id === video.author_id;
   const authorName = video.author?.full_name || video.author?.username || "Unknown birder";
   const [showComments, setShowComments] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSpecies, setEditSpecies] = useState(video.species_name);
+  const [editLocation, setEditLocation] = useState(video.location_name || "");
+  const [editNote, setEditNote] = useState(video.note || "");
+  const [editTaggedUserIds, setEditTaggedUserIds] = useState<string[]>(
+    video.tagged_profiles?.map((p: any) => p.id) || []
+  );
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["all-users-to-tag-edit-video", user?.id],
+    queryFn: () => listUsers(user!.id, ""),
+    enabled: !!user?.id && isEditing,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deletePost(video.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts"] });
+      toast({
+        title: "Video deleted",
+        description: "Your video sighting has been removed successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not delete video",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: () => {
+      const notePayload = JSON.stringify({ body: editNote, tags: editTaggedUserIds });
+      return updatePost(video.id, {
+        species_name: editSpecies,
+        location_name: editLocation,
+        note: notePayload,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts"] });
+      setIsEditing(false);
+      toast({
+        title: "Video updated",
+        description: "Your video details have been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update video",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <div className="snap-start shrink-0 h-full w-full relative flex items-center justify-center bg-black overflow-hidden rounded-2xl border border-border">
@@ -511,6 +798,28 @@ export const VideoCard = ({
           </button>
           <span className="text-[11px] font-bold mt-1 drop-shadow-md">Share</span>
         </div>
+
+        {/* Three dot options for author in VideoCard */}
+        {isAuthor && (
+          <div className="flex flex-col items-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-3 rounded-full bg-black/40 hover:bg-black/60 transition-colors shadow-md backdrop-blur-sm text-white">
+                  <MoreVertical className="h-6 w-6" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-background border border-border">
+                <DropdownMenuItem onClick={() => setIsEditing(true)} className="cursor-pointer">
+                  Edit post
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} className="cursor-pointer text-destructive focus:text-destructive font-medium">
+                  Delete post
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <span className="text-[11px] font-bold mt-1 drop-shadow-md">More</span>
+          </div>
+        )}
       </div>
 
       {/* Bottom Info Overlay */}
@@ -585,6 +894,134 @@ export const VideoCard = ({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Edit Video Sighting Modal */}
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent className="max-w-md bg-background border-border max-h-[90vh] overflow-y-auto text-foreground">
+          <DialogHeader>
+            <DialogTitle>Edit video details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 text-left">
+            <div className="space-y-2">
+              <Label htmlFor="edit-video-species-name">Species name</Label>
+              <Input
+                id="edit-video-species-name"
+                value={editSpecies}
+                onChange={(event) => setEditSpecies(event.target.value)}
+                placeholder="Example: Indian Peafowl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-video-location-name">Location</Label>
+              <Input
+                id="edit-video-location-name"
+                value={editLocation}
+                onChange={(event) => setEditLocation(event.target.value)}
+                placeholder="Where did you see it?"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-video-note">Notes</Label>
+              <Textarea
+                id="edit-video-note"
+                value={editNote}
+                onChange={(event) => setEditNote(event.target.value)}
+                placeholder="Add context about the sighting"
+              />
+            </div>
+
+            {/* Tag companions */}
+            <div className="space-y-2">
+              <Label>Tag companions</Label>
+              <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 rounded-xl border border-border bg-card">
+                {editTaggedUserIds.length === 0 ? (
+                  <span className="text-xs text-muted-foreground self-center px-1">No companions tagged</span>
+                ) : (
+                  editTaggedUserIds.map(id => {
+                    const taggedUser = allUsers.find(u => u.id === id);
+                    if (!taggedUser) return null;
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1 rounded-full">
+                        @{taggedUser.username}
+                        <button
+                          type="button"
+                          onClick={() => setEditTaggedUserIds(prev => prev.filter(tid => tid !== id))}
+                          className="hover:text-destructive shrink-0 font-bold ml-0.5"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+              
+              <div className="rounded-2xl border border-border bg-card p-3 max-h-48 overflow-y-auto space-y-2">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-1">Select users to tag</p>
+                {allUsers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-1">No other users found</p>
+                ) : (
+                  <div className="space-y-1">
+                    {allUsers.map((u) => {
+                      const isTagged = editTaggedUserIds.includes(u.id);
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            if (isTagged) {
+                              setEditTaggedUserIds(prev => prev.filter(id => id !== u.id));
+                            } else {
+                              setEditTaggedUserIds(prev => [...prev, u.id]);
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors ${
+                            isTagged ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7">
+                              <AvatarImage src={u.avatar_url || undefined} />
+                              <AvatarFallback>{getInitials(u)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-xs font-semibold">{u.full_name || u.username}</p>
+                              <p className="text-[10px] text-muted-foreground">@{u.username}</p>
+                            </div>
+                          </div>
+                          <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${
+                            isTagged ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                          }`}>
+                            {isTagged && <span className="text-[9px] font-bold">✓</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              className="w-full mt-4"
+              disabled={editMutation.isPending || !editSpecies.trim()}
+              onClick={() => editMutation.mutate()}
+            >
+              {editMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving changes...
+                </>
+              ) : (
+                "Save changes"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

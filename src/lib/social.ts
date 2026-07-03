@@ -869,3 +869,32 @@ export async function listNotifications(myUserId: string): Promise<InAppNotifica
 
   return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
+
+export async function deletePost(postId: string) {
+  const { error } = await supabase
+    .from("posts")
+    .delete()
+    .eq("id", postId);
+
+  if (error) throw error;
+}
+
+export async function updatePost(postId: string, updates: {
+  species_name: string;
+  location_name?: string;
+  note?: string;
+}) {
+  const { data, error } = await supabase
+    .from("posts")
+    .update({
+      species_name: updates.species_name.trim(),
+      location_name: updates.location_name?.trim() || null,
+      note: updates.note?.trim() || null,
+    })
+    .eq("id", postId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Post;
+}
