@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Geolocation } from "@capacitor/geolocation";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { 
   LayoutDashboard, 
   Search, 
@@ -38,6 +40,9 @@ export const DashboardPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRarity, setFilterRarity] = useState<"all" | "rare" | "common">("all");
 
+  const miniMapContainer = useRef<HTMLDivElement>(null);
+  const miniMap = useRef<maplibregl.Map | null>(null);
+
   // Get user location on mount
   useEffect(() => {
     const locate = async () => {
@@ -55,6 +60,25 @@ export const DashboardPage = () => {
     };
     locate();
   }, []);
+
+  // Initialize static mini map background centered on user location coordinates
+  useEffect(() => {
+    if (!miniMapContainer.current || miniMap.current || !userLocation) return;
+
+    miniMap.current = new maplibregl.Map({
+      container: miniMapContainer.current,
+      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      center: [userLocation.lng, userLocation.lat],
+      zoom: 9.2,
+      interactive: false,
+      attributionControl: false
+    });
+
+    return () => {
+      miniMap.current?.remove();
+      miniMap.current = null;
+    };
+  }, [userLocation]);
 
   // Fetch local bird observations using userLocation (within 50km, last 7 days)
   const { data: rawSightings = [], isLoading } = useQuery<RecentObservation[]>({
@@ -412,8 +436,11 @@ export const DashboardPage = () => {
 
                   {/* Radiating node diagram container */}
                   <div className="h-64 border border-border/60 bg-muted/20 dark:bg-muted/5 rounded-2xl relative overflow-hidden flex items-center justify-center">
+                    {/* Real Geographic Map Background */}
+                    <div ref={miniMapContainer} className="absolute inset-0 z-0 opacity-60 dark:opacity-30 mix-blend-multiply dark:mix-blend-normal pointer-events-none" />
+
                     {/* SVG Dotted radiating lines */}
-                    <svg className="absolute inset-0 h-full w-full pointer-events-none">
+                    <svg className="absolute inset-0 h-full w-full pointer-events-none z-10">
                       {radiatingBirds.map((item, idx) => (
                         <line
                           key={idx}
@@ -422,15 +449,15 @@ export const DashboardPage = () => {
                           x2={`calc(50% + ${item.x}px)`}
                           y2={`calc(50% + ${item.y}px)`}
                           stroke="currentColor"
-                          strokeWidth="1.5"
+                          strokeWidth="1.8"
                           strokeDasharray="4 4"
-                          className="text-primary/40"
+                          className="text-primary/70"
                         />
                       ))}
                     </svg>
 
                     {/* Central Home Node */}
-                    <div className="absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-10">
+                    <div className="absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-20">
                       <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
                         🏠
                       </div>
@@ -438,14 +465,14 @@ export const DashboardPage = () => {
 
                     {/* Radiating bird points */}
                     {radiatingBirds.length === 0 ? (
-                      <div className="text-xs text-muted-foreground absolute inset-0 flex items-center justify-center">
+                      <div className="text-xs text-muted-foreground absolute inset-0 flex items-center justify-center z-20">
                         No local location points available
                       </div>
                     ) : (
                       radiatingBirds.map((item, idx) => (
                         <div
                           key={idx}
-                          className="absolute"
+                          className="absolute z-20"
                           style={{
                             left: `calc(50% + ${item.x}px)`,
                             top: `calc(50% + ${item.y}px)`,
