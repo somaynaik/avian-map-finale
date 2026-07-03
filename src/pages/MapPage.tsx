@@ -447,7 +447,11 @@ const MapPage = () => {
         maxWidth: '300px',
       }).setHTML(`
         <div style="font-family: system-ui, sans-serif;">
-          ${post.image_url ? `<img src="${post.image_url}" alt="${post.species_name}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" />` : ''}
+          ${post.image_url ? (
+            post.image_url.toLowerCase().includes('.mp4') || post.image_url.toLowerCase().includes('.mov') || post.image_url.toLowerCase().includes('.webm')
+              ? `<video src="${post.image_url}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" autoplay muted loop playsinline></video>`
+              : `<img src="${post.image_url}" alt="${post.species_name}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" />`
+          ) : ''}
           <div style="padding: 12px;">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
               <span style="background: #e67e22; color: white; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;">Community</span>
@@ -677,11 +681,20 @@ const MapPage = () => {
                     >
                       <div className="flex items-start gap-3">
                         {post.image_url && (
-                          <img
-                            src={post.image_url}
-                            alt={post.species_name}
-                            className="w-10 h-10 rounded-lg object-cover shrink-0"
-                          />
+                          post.image_url.toLowerCase().includes('.mp4') || post.image_url.toLowerCase().includes('.mov') || post.image_url.toLowerCase().includes('.webm') ? (
+                            <video
+                              src={post.image_url}
+                              className="w-10 h-10 rounded-lg object-cover shrink-0"
+                              preload="metadata"
+                              muted
+                            />
+                          ) : (
+                            <img
+                              src={post.image_url}
+                              alt={post.species_name}
+                              className="w-10 h-10 rounded-lg object-cover shrink-0"
+                            />
+                          )
                         )}
                         <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-sm truncate">{post.species_name}</h3>

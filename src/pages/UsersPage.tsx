@@ -68,7 +68,7 @@ const UsersPage = () => {
             <Users2 className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium">No matching users found</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Accounts appear here once users sign up and their profiles exist in Supabase.
+              Accounts appear here once users sign up and create their profiles.
             </p>
           </div>
         ) : (

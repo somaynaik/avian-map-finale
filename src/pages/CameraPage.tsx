@@ -1,7 +1,7 @@
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Camera, ImagePlus, Loader2, MapPin, Sparkles, Mic, Square, Upload, Music } from "lucide-react";
+import { ArrowLeft, Camera, ImagePlus, Loader2, MapPin, Sparkles, Mic, Square, Upload, Music, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Geolocation } from "@capacitor/geolocation";
@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { createPost, uploadPostImage } from "@/lib/social";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { createPost, uploadPostImage, listUsers, getInitials } from "@/lib/social";
 
 const CLASSIFIER_URL = import.meta.env.VITE_BIRDSCANNER_URL || "http://localhost:5000";
 
@@ -22,6 +23,8 @@ const CameraPage = () => {
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -31,11 +34,18 @@ const CameraPage = () => {
   const [locationName, setLocationName] = useState("");
   const [note, setNote] = useState("");
   const [predictedSpecies, setPredictedSpecies] = useState<string | null>(null);
-
+  const [taggedUserIds, setTaggedUserIds] = useState<string[]>([]);
+ 
   // Location pin state
   const [pinLocation, setPinLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["all-users-to-tag", user?.id],
+    queryFn: () => listUsers(user!.id, ""),
+    enabled: !!user?.id,
+  });
   const miniMapContainerRef = useRef<HTMLDivElement>(null);
   const miniMapRef = useRef<maplibregl.Map | null>(null);
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -50,6 +60,17 @@ const CameraPage = () => {
     setImagePreview(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [imageFile]);
+
+  useEffect(() => {
+    if (!videoFile) {
+      setVideoPreview(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(videoFile);
+    setVideoPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [videoFile]);
 
   useEffect(() => {
     return () => {
@@ -223,21 +244,25 @@ const CameraPage = () => {
 
   const createPostMutation = useMutation({
     mutationFn: async () => {
-      if (!imageFile && !audioBlob) {
-        throw new Error("Upload an image or record audio before posting.");
+      if (!imageFile && !audioBlob && !videoFile) {
+        throw new Error("Upload an image, video, or record audio before posting.");
       }
 
       // If only audio is provided, use a default image since image_url is required by the DB
       let imageUrl = "https://i.postimg.cc/3JXmQBSp/avian-map-final-logo.jpg";
       if (imageFile) {
         imageUrl = await uploadPostImage(user!.id, imageFile);
+      } else if (videoFile) {
+        imageUrl = await uploadPostImage(user!.id, videoFile);
       }
+
+      const notePayload = JSON.stringify({ body: note, tags: taggedUserIds });
       
       return createPost({
         author_id: user!.id,
         species_name: speciesName,
         location_name: locationName,
-        note,
+        note: notePayload,
         image_url: imageUrl,
         latitude: pinLocation?.lat ?? null,
         longitude: pinLocation?.lng ?? null,
@@ -268,9 +293,24 @@ const CameraPage = () => {
     if (!file) return;
 
     setAudioBlob(null);
+    setVideoFile(null);
     setImageFile(file);
     setPredictedSpecies(null);
     classifyMutation.mutate(file);
+  };
+
+  const handleVideoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+
+    setImageFile(null);
+    setAudioBlob(null);
+    setVideoFile(file);
+    setPredictedSpecies(null);
+    toast({
+      title: "Video selected",
+      description: "Please manually enter the species name below.",
+    });
   };
 
   const handleAudioUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -278,6 +318,7 @@ const CameraPage = () => {
     if (!file) return;
 
     setImageFile(null);
+    setVideoFile(null);
     setAudioBlob(file);
     setPredictedSpecies(null);
     classifyMutation.mutate(file);
@@ -327,8 +368,10 @@ const CameraPage = () => {
   const handleClear = () => {
     setImageFile(null);
     setAudioBlob(null);
+    setVideoFile(null);
     setPredictedSpecies(null);
     setSpeciesName("");
+    setTaggedUserIds([]);
   };
 
   return (
@@ -348,10 +391,11 @@ const CameraPage = () => {
       </div>
 
       <div className="mx-auto max-w-lg space-y-4 px-4 pt-4">
-        {/* Media Preview / Upload Area */}
         <div className="overflow-hidden rounded-3xl border border-border bg-card">
           {imagePreview ? (
             <img src={imagePreview} alt="Captured bird" className="aspect-[4/5] w-full object-cover" />
+          ) : videoPreview ? (
+            <video src={videoPreview} controls playsInline className="aspect-[4/5] w-full object-cover" />
           ) : audioBlob ? (
             <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 bg-muted/30">
               <div className="rounded-full bg-primary/20 p-6 animate-pulse">
@@ -361,7 +405,7 @@ const CameraPage = () => {
               <audio controls src={URL.createObjectURL(audioBlob)} className="mt-4" />
             </div>
           ) : (
-            <div className="flex aspect-[4/5] flex-col items-center justify-center gap-6 text-center">
+            <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 text-center">
               
               {/* Image Input */}
               <label className="cursor-pointer group flex flex-col items-center gap-2">
@@ -386,22 +430,22 @@ const CameraPage = () => {
                 <div className="h-px bg-border flex-1"></div>
               </div>
 
-              {/* Audio Controls */}
-              <div className="flex gap-8">
+              {/* Media Upload Buttons */}
+              <div className="grid grid-cols-3 gap-4 px-6 w-full">
                 <div className="flex flex-col items-center gap-2">
                   <button
                     onClick={isRecording ? stopRecording : startRecording}
-                    className={`rounded-full p-5 transition-colors ${
+                    className={`rounded-full p-4 transition-colors ${
                       isRecording 
                         ? 'bg-destructive/20 text-destructive hover:bg-destructive/30 animate-pulse' 
                         : 'bg-primary/10 text-primary hover:bg-primary/20'
                     }`}
                   >
-                    {isRecording ? <Square className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+                    {isRecording ? <Square className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                   </button>
-                  <p className="text-sm font-medium">{isRecording ? "Stop" : "Record Call"}</p>
+                  <p className="text-[11px] font-medium truncate">{isRecording ? "Stop" : "Record Call"}</p>
                 </div>
-
+ 
                 <label className="cursor-pointer flex flex-col items-center gap-2">
                   <input
                     type="file"
@@ -409,10 +453,23 @@ const CameraPage = () => {
                     className="hidden"
                     onChange={handleAudioUpload}
                   />
-                  <div className="rounded-full bg-primary/10 p-5 hover:bg-primary/20 transition-colors">
-                    <Upload className="h-8 w-8 text-primary" />
+                  <div className="rounded-full bg-primary/10 p-4 hover:bg-primary/20 transition-colors">
+                    <Upload className="h-6 w-6 text-primary" />
                   </div>
-                  <p className="text-sm font-medium">Upload Audio</p>
+                  <p className="text-[11px] font-medium truncate">Upload Audio</p>
+                </label>
+
+                <label className="cursor-pointer flex flex-col items-center gap-2">
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={handleVideoChange}
+                  />
+                  <div className="rounded-full bg-primary/10 p-4 hover:bg-primary/20 transition-colors">
+                    <Upload className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-[11px] font-medium truncate">Upload Video</p>
                 </label>
               </div>
 
@@ -421,27 +478,44 @@ const CameraPage = () => {
         </div>
 
         {/* Action buttons */}
-        {(imagePreview || audioBlob) ? (
+        {(imagePreview || videoPreview || audioBlob) ? (
           <div className="grid grid-cols-2 gap-3">
             <Button type="button" variant="outline" onClick={handleClear}>
               <ImagePlus className="h-4 w-4 mr-2" />
               Clear Media
             </Button>
-            <label>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <Button type="button" variant="outline" className="w-full" asChild>
-                <span>
-                  <Camera className="h-4 w-4" />
-                  Take new photo
-                </span>
-              </Button>
-            </label>
+            {videoPreview ? (
+              <label>
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleVideoChange}
+                />
+                <Button type="button" variant="outline" className="w-full" asChild>
+                  <span>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload new video
+                  </span>
+                </Button>
+              </label>
+            ) : (
+              <label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <Button type="button" variant="outline" className="w-full" asChild>
+                  <span>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Take new photo
+                  </span>
+                </Button>
+              </label>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
@@ -478,40 +552,42 @@ const CameraPage = () => {
         )}
 
         {/* Model prediction card */}
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">AI Model prediction</p>
+        {!videoFile && (
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">AI Model prediction</p>
+              </div>
+              {classifyMutation.isPending && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
             </div>
-            {classifyMutation.isPending && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
-          </div>
 
-          <div className="mt-3 rounded-xl bg-muted px-3 py-2 text-sm">
-            {predictedSpecies ? (
-              <span className="inline-flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                {predictedSpecies}
-              </span>
-            ) : (
-              <span className="text-muted-foreground">
-                Upload a photo to classify it with the AI model.
-              </span>
+            <div className="mt-3 rounded-xl bg-muted px-3 py-2 text-sm">
+              {predictedSpecies ? (
+                <span className="inline-flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  {predictedSpecies}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Upload a photo to classify it with the AI model.
+                </span>
+              )}
+            </div>
+
+            {imageFile && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 w-full"
+                disabled={classifyMutation.isPending}
+                onClick={() => classifyMutation.mutate(imageFile)}
+              >
+                <Sparkles className="h-4 w-4" />
+                Re-run model
+              </Button>
             )}
           </div>
-
-          {imageFile && (
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3 w-full"
-              disabled={classifyMutation.isPending}
-              onClick={() => classifyMutation.mutate(imageFile)}
-            >
-              <Sparkles className="h-4 w-4" />
-              Re-run model
-            </Button>
-          )}
-        </div>
+        )}
 
         {/* Pin on map card */}
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -596,10 +672,82 @@ const CameraPage = () => {
           />
         </div>
 
+        {/* Tag companions */}
+        <div className="space-y-2">
+          <Label>Tag companions</Label>
+          <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 rounded-xl border border-border bg-card">
+            {taggedUserIds.length === 0 ? (
+              <span className="text-xs text-muted-foreground self-center px-1">No companions tagged</span>
+            ) : (
+              taggedUserIds.map(id => {
+                const taggedUser = allUsers.find(u => u.id === id);
+                if (!taggedUser) return null;
+                return (
+                  <span key={id} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1 rounded-full">
+                    @{taggedUser.username}
+                    <button
+                      type="button"
+                      onClick={() => setTaggedUserIds(prev => prev.filter(tid => tid !== id))}
+                      className="hover:text-destructive shrink-0 font-bold ml-0.5"
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })
+            )}
+          </div>
+          
+          <div className="rounded-2xl border border-border bg-card p-3 max-h-48 overflow-y-auto space-y-2">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-1">Select users to tag</p>
+            {allUsers.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-1">No other users found</p>
+            ) : (
+              <div className="space-y-1">
+                {allUsers.map((u) => {
+                  const isTagged = taggedUserIds.includes(u.id);
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        if (isTagged) {
+                          setTaggedUserIds(prev => prev.filter(id => id !== u.id));
+                        } else {
+                          setTaggedUserIds(prev => [...prev, u.id]);
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors ${
+                        isTagged ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-7 w-7">
+                          <AvatarImage src={u.avatar_url || undefined} />
+                          <AvatarFallback>{getInitials(u)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-xs font-semibold">{u.full_name || u.username}</p>
+                          <p className="text-[10px] text-muted-foreground">@{u.username}</p>
+                        </div>
+                      </div>
+                      <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${
+                        isTagged ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                      }`}>
+                        {isTagged && <span className="text-[9px] font-bold">✓</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
         <Button
           type="button"
           className="w-full"
-          disabled={createPostMutation.isPending || (!imageFile && !audioBlob) || !speciesName.trim()}
+          disabled={createPostMutation.isPending || (!imageFile && !audioBlob && !videoFile) || !speciesName.trim()}
           onClick={() => createPostMutation.mutate()}
         >
           {createPostMutation.isPending ? (

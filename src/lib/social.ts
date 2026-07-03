@@ -40,6 +40,7 @@ export type FeedPost = Post & {
   author: Profile | null;
   likes_count: number;
   liked_by_me: boolean;
+  tagged_profiles?: Profile[];
 };
 
 export type UserDirectoryEntry = Profile & {
@@ -258,25 +259,41 @@ export async function createPost(input: {
   return data as Post;
 }
 
-export async function listFeedPosts(currentUserId: string) {
-  const { data: posts, error } = await supabase
-    .from("posts")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (error) throw error;
-  if (!posts?.length) return [] as FeedPost[];
+export async function hydrateFeedPosts(posts: Post[], currentUserId: string) {
+  if (!posts.length) return [] as FeedPost[];
 
   const authorIds = [...new Set(posts.map((post) => post.author_id))];
   const postIds = posts.map((post) => post.id);
 
-  const [{ data: profiles }, { data: likes }] = await Promise.all([
+  // Parse tagged user IDs from all posts
+  const taggedIdsSet = new Set<string>();
+  posts.forEach((post) => {
+    try {
+      const parsed = JSON.parse(post.note || "");
+      if (parsed && typeof parsed === "object" && Array.isArray(parsed.tags)) {
+        parsed.tags.forEach((tagId: string) => taggedIdsSet.add(tagId));
+      }
+    } catch {
+      // Ignored
+    }
+  });
+  const allTaggedIds = Array.from(taggedIdsSet);
+
+  // Load authors, likes, and tagged profiles in parallel
+  const [
+    { data: profiles },
+    { data: likes },
+    { data: taggedProfiles }
+  ] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
     supabase.from("post_likes").select("post_id,user_id").in("post_id", postIds),
+    allTaggedIds.length > 0
+      ? supabase.from("profiles").select("*").in("id", allTaggedIds)
+      : Promise.resolve({ data: [] })
   ]);
 
-  const profileById = new Map((profiles || []).map((profile) => [profile.id, profile as Profile]));
+  const profileById = new Map((profiles || []).map((p) => [p.id, p as Profile]));
+  const taggedProfileById = new Map((taggedProfiles || []).map((p) => [p.id, p as Profile]));
   const likesByPost = new Map<string, Array<{ user_id: string }>>();
 
   for (const like of (likes || []) as { post_id: string; user_id: string }[]) {
@@ -287,13 +304,44 @@ export async function listFeedPosts(currentUserId: string) {
 
   return posts.map((post) => {
     const postLikes = likesByPost.get(post.id) || [];
+    let noteText = post.note || "";
+    let taggedList: Profile[] = [];
+
+    try {
+      const parsed = JSON.parse(post.note || "");
+      if (parsed && typeof parsed === "object" && "body" in parsed) {
+        noteText = parsed.body || "";
+        if (Array.isArray(parsed.tags)) {
+          parsed.tags.forEach((tagId: string) => {
+            const prof = taggedProfileById.get(tagId);
+            if (prof) taggedList.push(prof);
+          });
+        }
+      }
+    } catch {
+      noteText = post.note || "";
+    }
+
     return {
       ...(post as Post),
+      note: noteText,
       author: profileById.get(post.author_id) || null,
       likes_count: postLikes.length,
       liked_by_me: postLikes.some((like) => like.user_id === currentUserId),
+      tagged_profiles: taggedList,
     };
   });
+}
+
+export async function listFeedPosts(currentUserId: string) {
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return hydrateFeedPosts(posts || [], currentUserId);
 }
 
 export async function listPostComments(postId: string): Promise<PostComment[]> {
@@ -515,11 +563,21 @@ export async function getRecentPostsForUser(userId: string) {
     .from("posts")
     .select("*")
     .eq("author_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(5);
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data || []) as Post[];
+  return hydrateFeedPosts(data || [], userId);
+}
+
+export async function getPostsTaggedUser(userId: string) {
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("*")
+    .like("note", `%${userId}%`)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return hydrateFeedPosts(posts || [], userId);
 }
 
 async function getExistingConversationId(currentUserId: string, otherUserId: string) {
