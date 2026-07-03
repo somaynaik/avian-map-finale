@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Loader2, MessageCircle, UserPlus, ArrowLeft, Bell, MoreVertical, LayoutGrid, Play, Contact } from "lucide-react";
+import { Loader2, MessageCircle, UserPlus, ArrowLeft, Bell, MoreVertical, LayoutGrid, Play, Contact, Heart, Share2, MapPin } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -16,7 +16,10 @@ import {
   getUserDirectoryEntry,
   unfollowUser,
   getPostsTaggedUser,
+  togglePostLike,
+  type FeedPost,
 } from "@/lib/social";
+import { FeedCard, VideoCard } from "./FeedPage";
 
 const UserProfilePage = () => {
   const { user } = useAuth();
@@ -42,6 +45,34 @@ const UserProfilePage = () => {
     queryKey: ["user-profile-tagged-posts", userId],
     queryFn: () => getPostsTaggedUser(userId!),
     enabled: !!userId,
+  });
+
+  const [selectedPost, setSelectedPost] = useState<FeedPost | null>(null);
+
+  const likeMutation = useMutation({
+    mutationFn: ({ postId, liked }: { postId: string; liked: boolean }) =>
+      togglePostLike(postId, user!.id, liked),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-profile-posts", userId] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile-tagged-posts", userId] });
+      if (selectedPost) {
+        setSelectedPost((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            liked_by_me: !prev.liked_by_me,
+            likes_count: prev.liked_by_me ? prev.likes_count - 1 : prev.likes_count + 1,
+          };
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update like",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const isVideoUrl = (url?: string) => {
@@ -214,6 +245,7 @@ const UserProfilePage = () => {
                 {userImagePosts.map((post) => (
                   <div
                     key={post.id}
+                    onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
                     <img
@@ -240,6 +272,7 @@ const UserProfilePage = () => {
                 {userVideoPosts.map((post) => (
                   <div
                     key={post.id}
+                    onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
                     <video
@@ -272,6 +305,7 @@ const UserProfilePage = () => {
                 {taggedPosts.map((post) => (
                   <div
                     key={post.id}
+                    onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
                     {post.image_url.toLowerCase().includes(".mp4") || post.image_url.toLowerCase().includes(".mov") || post.image_url.toLowerCase().includes(".webm") ? (
@@ -310,6 +344,41 @@ const UserProfilePage = () => {
         userId={profile.id}
         type={followListType || "followers"}
       />
+
+      {/* Post Detail & Engagement Modal */}
+      <Dialog open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
+        <DialogContent className="max-w-lg p-0 overflow-y-auto max-h-[90vh] bg-background border-border">
+          <DialogHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+            <DialogTitle className="text-sm font-semibold">Post Details</DialogTitle>
+          </DialogHeader>
+          {selectedPost && (
+            <div className="p-2">
+              {selectedPost.image_url.toLowerCase().includes(".mp4") ||
+              selectedPost.image_url.toLowerCase().includes(".mov") ||
+              selectedPost.image_url.toLowerCase().includes(".webm") ? (
+                <div className="h-[500px]">
+                  <VideoCard
+                    video={selectedPost}
+                    onToggleLike={() =>
+                      likeMutation.mutate({ postId: selectedPost.id, liked: selectedPost.liked_by_me })
+                    }
+                    isPending={likeMutation.isPending}
+                  />
+                </div>
+              ) : (
+                <FeedCard
+                  post={selectedPost}
+                  index={0}
+                  onToggleLike={() =>
+                    likeMutation.mutate({ postId: selectedPost.id, liked: selectedPost.liked_by_me })
+                  }
+                  isPending={likeMutation.isPending}
+                />
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

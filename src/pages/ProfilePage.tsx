@@ -29,7 +29,10 @@ import {
   updateProfile,
   uploadAvatar,
   getPostsTaggedUser,
+  togglePostLike,
+  type FeedPost,
 } from "@/lib/social";
+import { FeedCard, VideoCard } from "./FeedPage";
 
 const ProfilePage = () => {
   const { user, signOut } = useAuth();
@@ -68,6 +71,34 @@ const ProfilePage = () => {
     queryKey: ["profile-tagged-posts", user?.id],
     queryFn: () => getPostsTaggedUser(user!.id),
     enabled: !!user?.id,
+  });
+
+  const [selectedPost, setSelectedPost] = useState<FeedPost | null>(null);
+
+  const likeMutation = useMutation({
+    mutationFn: ({ postId, liked }: { postId: string; liked: boolean }) =>
+      togglePostLike(postId, user!.id, liked),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile-posts", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts", user?.id] });
+      if (selectedPost) {
+        setSelectedPost((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            liked_by_me: !prev.liked_by_me,
+            likes_count: prev.liked_by_me ? prev.likes_count - 1 : prev.likes_count + 1,
+          };
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update like",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const isVideoUrl = (url?: string) => {
@@ -377,6 +408,7 @@ const ProfilePage = () => {
                 {userImagePosts.map((post) => (
                   <div 
                     key={post.id} 
+                    onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
                     <img
@@ -403,6 +435,7 @@ const ProfilePage = () => {
                 {userVideoPosts.map((post) => (
                   <div 
                     key={post.id} 
+                    onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
                     <video
@@ -435,6 +468,7 @@ const ProfilePage = () => {
                 {taggedPosts.map((post) => (
                   <div 
                     key={post.id} 
+                    onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
                     {post.image_url.toLowerCase().includes(".mp4") || post.image_url.toLowerCase().includes(".mov") || post.image_url.toLowerCase().includes(".webm") ? (
@@ -471,6 +505,41 @@ const ProfilePage = () => {
           Sign out
         </Button>
       </div>
+
+      {/* Post Detail & Engagement Modal */}
+      <Dialog open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
+        <DialogContent className="max-w-lg p-0 overflow-y-auto max-h-[90vh] bg-background border-border">
+          <DialogHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+            <DialogTitle className="text-sm font-semibold">Post Details</DialogTitle>
+          </DialogHeader>
+          {selectedPost && (
+            <div className="p-2">
+              {selectedPost.image_url.toLowerCase().includes(".mp4") ||
+              selectedPost.image_url.toLowerCase().includes(".mov") ||
+              selectedPost.image_url.toLowerCase().includes(".webm") ? (
+                <div className="h-[500px]">
+                  <VideoCard
+                    video={selectedPost}
+                    onToggleLike={() =>
+                      likeMutation.mutate({ postId: selectedPost.id, liked: selectedPost.liked_by_me })
+                    }
+                    isPending={likeMutation.isPending}
+                  />
+                </div>
+              ) : (
+                <FeedCard
+                  post={selectedPost}
+                  index={0}
+                  onToggleLike={() =>
+                    likeMutation.mutate({ postId: selectedPost.id, liked: selectedPost.liked_by_me })
+                  }
+                  isPending={likeMutation.isPending}
+                />
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isEditProfileOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-[425px]">

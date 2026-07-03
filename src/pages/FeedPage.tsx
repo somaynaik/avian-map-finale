@@ -312,7 +312,7 @@ const FeedPage = () => {
   );
 };
 
-const FeedCard = ({
+export const FeedCard = ({
   post,
   index,
   onToggleLike,
@@ -427,7 +427,7 @@ const FeedCard = ({
   );
 };
 
-const VideoCard = ({
+export const VideoCard = ({
   video,
   onToggleLike,
   isPending,
