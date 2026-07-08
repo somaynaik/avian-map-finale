@@ -216,6 +216,19 @@ const CameraPage = () => {
         throw new Error(data.message || "No confident bird calls were detected.");
       }
 
+      // Verification for images: check if the returned classification matches a bird
+      if (!isAudio) {
+        if (
+          data.is_bird === false ||
+          (data.confidence !== undefined && data.confidence < 0.45) ||
+          (data.species && data.species.toLowerCase().trim() === "not a bird")
+        ) {
+          throw new Error(
+            data.message || "The uploaded image does not appear to contain a recognized bird species."
+          );
+        }
+      }
+
       // The audio API returns { candidates: [{ species: "..." }] } instead of { species: "..." }
       if (isAudio && data.candidates && data.candidates.length > 0) {
         data.species = data.candidates[0].species;
@@ -234,8 +247,13 @@ const CameraPage = () => {
       });
     },
     onError: (error: Error) => {
+      setImageFile(null);
+      setImagePreview(null);
+      setAudioBlob(null);
+      setPredictedSpecies(null);
+      setSpeciesName("");
       toast({
-        title: "Could not classify image",
+        title: "Media Rejected",
         description: error.message,
         variant: "destructive",
       });
