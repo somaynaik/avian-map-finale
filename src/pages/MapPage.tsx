@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapPage.css";
-import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users } from "lucide-react";
+import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Geolocation } from "@capacitor/geolocation";
 import { getRecentObservations, getNearbyObservations, type RecentObservation } from "@/lib/ebird";
@@ -10,6 +10,9 @@ import { getRecentGeoTaggedPosts, type GeoTaggedPost } from "@/lib/social";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { BirdImage } from "./DashboardPage";
+
+const BIRD_IMAGE_CACHE: Record<string, string> = {};
 
 // Indian states/regions for filtering
 const INDIAN_REGIONS = [
@@ -80,6 +83,53 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
   return R * c;
 }
+
+const getSearchTerms = (query: string): string[] => {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+  
+  const terms = [q];
+  
+  const synonymMap: Record<string, string[]> = {
+    "peacock": ["peafowl", "pavo"],
+    "peafowl": ["peacock", "pavo"],
+    "pigeon": ["columba", "dove"],
+    "dove": ["pigeon", "columba"],
+    "sparrow": ["passer"],
+    "crow": ["corvus"],
+    "eagle": ["aquila", "haliaeetus"],
+    "owl": ["bubo", "strigidae", "tyto"],
+    "duck": ["anas", "anatidae"],
+    "goose": ["anser"],
+    "swan": ["cygnus"],
+    "myna": ["acridotheres"],
+    "koel": ["eudynamys"],
+    "bulbul": ["pycnonotus"],
+    "parakeet": ["psittacula", "parrot"],
+    "parrot": ["parakeet", "psittaciformes"]
+  };
+
+  Object.entries(synonymMap).forEach(([key, values]) => {
+    if (q.includes(key)) {
+      terms.push(...values);
+    }
+    values.forEach(val => {
+      if (q.includes(val)) {
+        terms.push(key, ...values.filter(v => v !== val));
+      }
+    });
+  });
+
+  return Array.from(new Set(terms));
+};
+
+const matchSearch = (query: string, name: string, sciName?: string) => {
+  if (!query) return true;
+  const terms = getSearchTerms(query);
+  const nameLower = name.toLowerCase();
+  const sciLower = sciName ? sciName.toLowerCase() : "";
+  return terms.some(term => nameLower.includes(term) || sciLower.includes(term));
+};
 
 const MapPage = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -265,9 +315,14 @@ const MapPage = () => {
     else if (wind > 15) { score -= 10; reasons.push("Breezy winds"); }
 
     const hour = new Date().getHours();
+    const isNight = hour >= 20 || hour < 6;
     const isMorning = hour >= 6 && hour <= 10;
     const isEvening = hour >= 16 && hour <= 19;
-    if (!isMorning && !isEvening) {
+    
+    if (isNight) {
+      score = 0;
+      reasons.push("Night time - low visibility");
+    } else if (!isMorning && !isEvening) {
       score -= 15;
       reasons.push("Mid-day low activity");
     }
@@ -277,7 +332,11 @@ const MapPage = () => {
     let rating = "Fair";
     let color = "text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30";
     let barColor = "bg-yellow-500";
-    if (score >= 80) {
+    if (isNight) {
+      rating = "Not Optimal";
+      color = "text-destructive bg-destructive/10";
+      barColor = "bg-destructive";
+    } else if (score >= 80) {
       rating = "Optimum";
       color = "text-green-600 bg-green-50 dark:bg-green-950/30";
       barColor = "bg-green-500";
@@ -288,7 +347,9 @@ const MapPage = () => {
     }
 
     let tip = "Perfect weather to spot local birds. Grab your binoculars!";
-    if (score < 50) {
+    if (isNight) {
+      tip = "Birds are nesting and sleeping. Night time is not optimal for bird watching.";
+    } else if (score < 50) {
       tip = "Birds seek shelter during harsh weather. Better to wait it out.";
     } else if (score < 80) {
       tip = "Activity might be slower. Look near water bodies or sheltered trees.";
@@ -311,8 +372,12 @@ const MapPage = () => {
 
   // Group sightings by species for the sidebar
   const groupedSightings = useMemo(() => {
+    const filtered = searchQuery
+      ? sightings.filter(s => matchSearch(searchQuery, s.comName, s.sciName))
+      : sightings;
+
     const groups = new Map<string, RecentObservation[]>();
-    sightings.forEach(sighting => {
+    filtered.forEach(sighting => {
       const existing = groups.get(sighting.comName) || [];
       existing.push(sighting);
       groups.set(sighting.comName, existing);
@@ -323,7 +388,7 @@ const MapPage = () => {
       latestObservation: observations[0],
       observations,
     })).sort((a, b) => b.count - a.count);
-  }, [sightings]);
+  }, [sightings, searchQuery]);
 
   // Autolocate on mount
   useEffect(() => {
@@ -566,24 +631,25 @@ const MapPage = () => {
       });
 
       // Build scrollable list of species observed at this specific coordinate
-      const speciesListHtml = locSightings.slice(0, 5).map(s => `
-        <div style="margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; text-align: left;">
-          <strong style="font-size: 13px; color: #111827; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${s.comName}
-          </strong>
-          <span style="font-size: 11px; font-style: italic; color: #6b7280; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${s.sciName}
-          </span>
-          <span style="font-size: 10px; color: #9ca3af; display: block; margin-top: 1px;">
-            🕒 ${getTimeAgo(s.obsDt)}${s.howMany > 0 ? ` · ${s.howMany} spotted` : ''}
-          </span>
+      const speciesListHtml = locSightings.map(s => `
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f3f4f6; text-align: left;">
+          <img class="bird-popup-img-${s.speciesCode}" src="" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: none; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05); flex-shrink: 0;" />
+          <div class="bird-popup-placeholder-${s.speciesCode}" style="width: 36px; height: 36px; border-radius: 50%; background-color: rgba(31, 93, 59, 0.1); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            🐦
+          </div>
+          <div style="min-width: 0; flex: 1;">
+            <strong style="font-size: 13px; color: #111827; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px;">
+              ${s.comName}
+            </strong>
+            <span style="font-size: 11px; font-style: italic; color: #6b7280; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px;">
+              ${s.sciName}
+            </span>
+            <span style="font-size: 10px; color: #9ca3af; display: block; margin-top: 1px;">
+              🕒 ${getTimeAgo(s.obsDt)}${s.howMany > 0 ? ` · ${s.howMany} spotted` : ''}
+            </span>
+          </div>
         </div>
       `).join('');
-
-      const remainingCount = count - 5;
-      const footerHtml = remainingCount > 0 
-        ? `<p style="margin: 4px 0 0 0; font-size: 11px; font-weight: 600; color: #1F5D3B; text-align: center;">+ ${remainingCount} more species here</p>`
-        : '';
 
       const popup = new maplibregl.Popup({
         offset: 25,
@@ -591,16 +657,58 @@ const MapPage = () => {
         closeOnClick: false,
         maxWidth: '280px',
       }).setHTML(`
-        <div style="padding: 10px; font-family: system-ui, -apple-system, sans-serif; max-height: 250px; overflow-y: auto;">
+        <div style="padding: 10px; font-family: system-ui, -apple-system, sans-serif; max-height: 300px; overflow-y: auto;">
           <h3 style="margin: 0 0 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; text-align: left; border-bottom: 2px solid #1F5D3B; padding-bottom: 3px;">
             📍 ${firstSighting.locName.split(',')[0]}
           </h3>
           <div style="display: flex; flex-direction: column;">
             ${speciesListHtml}
           </div>
-          ${footerHtml}
         </div>
       `);
+
+      popup.on('open', () => {
+        locSightings.forEach(async (s) => {
+          if (!s.sciName) return;
+          const cacheKey = s.sciName.toLowerCase().trim();
+          
+          const setImg = (url: string) => {
+            const imgEls = document.querySelectorAll(`.bird-popup-img-${s.speciesCode}`);
+            const placeholderEls = document.querySelectorAll(`.bird-popup-placeholder-${s.speciesCode}`);
+            imgEls.forEach((el) => {
+              (el as HTMLImageElement).src = url;
+              (el as HTMLElement).style.display = 'block';
+            });
+            placeholderEls.forEach((el) => {
+              (el as HTMLElement).style.display = 'none';
+            });
+          };
+
+          if (BIRD_IMAGE_CACHE[cacheKey]) {
+            setImg(BIRD_IMAGE_CACHE[cacheKey]);
+            return;
+          }
+
+          try {
+            const formattedName = s.sciName
+              .split(" ")
+              .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+              .join("_");
+
+            const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(formattedName)}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.thumbnail && data.thumbnail.source) {
+                const url = data.thumbnail.source;
+                BIRD_IMAGE_CACHE[cacheKey] = url;
+                setImg(url);
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching bird image for popup:", error);
+          }
+        });
+      });
       
       popup.on('close', () => {
         setSelectedSighting(current => {
@@ -729,10 +837,7 @@ const MapPage = () => {
       const marker = markersRef.current.get(key);
       
       if (marker) {
-        const matches = locSightings.some(s => 
-          s.comName.toLowerCase().includes(searchLower) ||
-          s.sciName.toLowerCase().includes(searchLower)
-        );
+        const matches = locSightings.some(s => matchSearch(searchQuery, s.comName, s.sciName));
         const el = marker.getElement();
         el.style.display = matches ? 'flex' : 'none';
       }
@@ -742,7 +847,7 @@ const MapPage = () => {
       const key = `community-${post.id}`;
       const marker = communityMarkersRef.current.get(key);
       if (marker) {
-        const matches = post.species_name.toLowerCase().includes(searchLower);
+        const matches = matchSearch(searchQuery, post.species_name);
         const el = marker.getElement();
         el.style.display = matches ? 'flex' : 'none';
       }
@@ -776,7 +881,7 @@ const MapPage = () => {
             animate={{ x: 0, y: 0 }}
             exit={isMobile ? { y: "100%", x: 0 } : { x: -320, y: 0 }}
             transition={{ type: "spring", damping: 25 }}
-            className={`absolute bottom-[75px] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none transition-all duration-300 ${
+            className={`absolute bottom-[var(--nav-height)] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none transition-all duration-300 ${
               isMobile && isSidebarMinimized ? "h-[70px] overflow-hidden" : "h-[45vh]"
             }`}
           >
@@ -923,14 +1028,14 @@ const MapPage = () => {
             {/* Sightings List */}
             <div className="flex-1 overflow-y-auto">
               {/* Community Sightings Section */}
-              {communityPosts.length > 0 && (
+              {communityPosts.filter(post => matchSearch(searchQuery, post.species_name)).length > 0 && (
                 <div className="p-2 pb-0">
                   <div className="flex items-center gap-2 px-1 py-2">
                     <div className="w-5 h-5 rounded-full bg-[#e67e22] flex items-center justify-center text-[10px]">📸</div>
                     <span className="text-xs font-semibold text-[#e67e22] uppercase tracking-wide">Community Sightings</span>
                     <span className="ml-auto text-[10px] text-muted-foreground">Last 6 hrs</span>
                   </div>
-                  {communityPosts.map((post) => (
+                  {communityPosts.filter(post => matchSearch(searchQuery, post.species_name)).map((post) => (
                     <button
                       key={post.id}
                       onClick={() => {
@@ -996,7 +1101,7 @@ const MapPage = () => {
               )}
 
               {/* eBird Sightings Section */}
-              {communityPosts.length > 0 && groupedSightings.length > 0 && (
+              {communityPosts.filter(post => matchSearch(searchQuery, post.species_name)).length > 0 && groupedSightings.length > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2">
                   <div className="w-5 h-5 rounded-full bg-[#3a7d52] flex items-center justify-center text-[10px]">🐦</div>
                   <span className="text-xs font-semibold text-[#3a7d52] uppercase tracking-wide">eBird Sightings</span>
@@ -1031,9 +1136,19 @@ const MapPage = () => {
                       }}
                       className="w-full p-3 mb-2 bg-background hover:bg-muted rounded-xl text-left transition-colors border border-border"
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3">
+                        <BirdImage
+                          scientificName={latestObservation.sciName}
+                          commonName={species}
+                          className="h-10 w-10 rounded-lg"
+                        />
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-sm truncate">{species}</h3>
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-medium text-sm truncate">{species}</h3>
+                            <span className="px-2 py-1 bg-primary/10 text-primary rounded-full text-[10px] font-medium shrink-0">
+                              {count}
+                            </span>
+                          </div>
                           <p className="text-xs text-muted-foreground italic truncate mt-0.5">
                             {latestObservation.sciName}
                           </p>
@@ -1048,9 +1163,6 @@ const MapPage = () => {
                             </span>
                           </div>
                         </div>
-                        <span className="px-2 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium shrink-0">
-                          {count}
-                        </span>
                       </div>
                     </button>
                   ))}
@@ -1121,7 +1233,7 @@ const MapPage = () => {
       {/* Locate button */}
       <button 
         onClick={handleLocate}
-        className="absolute bottom-24 right-4 z-10 w-12 h-12 rounded-full bg-primary shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
+        className="absolute bottom-[calc(var(--nav-height)+16px)] right-4 z-10 w-12 h-12 rounded-full bg-primary shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
       >
         <Locate className="w-5 h-5 text-primary-foreground" />
       </button>
@@ -1219,14 +1331,34 @@ const MapPage = () => {
 
       {/* Selected Sighting Detail & Navigation Card */}
       {selectedSighting && !isNavigating && (
-        <div className="absolute bottom-24 left-4 right-4 md:left-auto md:w-96 z-20 bg-card/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-border p-4 animate-in slide-in-from-bottom duration-200">
-          <div className="flex justify-between items-start">
+        <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 md:left-auto md:w-96 z-20 bg-card/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-border p-4 animate-in slide-in-from-bottom duration-200">
+          <div className="flex justify-between items-start gap-3">
+            <BirdImage
+              scientificName={selectedSighting.sciName}
+              commonName={selectedSighting.comName}
+              className="h-16 w-16 rounded-xl"
+            />
             <div className="flex-1 min-w-0">
               <span className="inline-block bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">
                 Selected Destination
               </span>
-              <h3 className="font-semibold text-lg text-foreground truncate">{selectedSighting.comName}</h3>
-              <p className="text-xs text-muted-foreground italic truncate mt-0.5">{selectedSighting.sciName}</p>
+              <h3 className="font-semibold text-base text-foreground truncate">{selectedSighting.comName}</h3>
+              <p className="text-xs text-muted-foreground italic truncate mt-0.5 flex items-center gap-1.5">
+                {selectedSighting.sciName}
+                <a
+                  href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
+                    selectedSighting.sciName
+                      .split(" ")
+                      .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+                      .join("_")
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-primary hover:underline font-semibold ml-1 shrink-0"
+                >
+                  (Know More <ExternalLink className="w-3 h-3" />)
+                </a>
+              </p>
               
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
                 <MapPin className="w-3.5 h-3.5" />
@@ -1293,7 +1425,7 @@ const MapPage = () => {
           </div>
 
           {/* Bottom Panel */}
-          <div className="absolute bottom-24 left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-bottom duration-300">
+          <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-bottom duration-300">
             <div className="bg-card/95 backdrop-blur-lg border border-border rounded-3xl p-4 shadow-2xl space-y-4">
               <div className="flex justify-between items-center">
                 <div>
