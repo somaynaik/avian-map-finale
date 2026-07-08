@@ -16,6 +16,64 @@ import { createPost, uploadPostImage, listUsers, getInitials } from "@/lib/socia
 
 const CLASSIFIER_URL = import.meta.env.VITE_BIRDSCANNER_URL || "http://localhost:5000";
 
+const loadScript = (src: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
+};
+
+const verifyBirdImage = async (imgElement: HTMLImageElement): Promise<boolean> => {
+  try {
+    await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js");
+    
+    // @ts-ignore
+    const model = await window.mobilenet.load({ version: 2, alpha: 1.0 });
+    const predictions = await model.classify(imgElement);
+    console.log("MobileNet Predictions:", predictions);
+    
+    const birdKeywords = [
+      "bird", "peacock", "peafowl", "pavo", "finch", "sparrow", "albatross", "macaw", "parrot", "owl", "swan", "duck", 
+      "goose", "crane", "flamingo", "cock", "hen", "vulture", "falcon", "eagle", "hawk", "hummingbird", "toucan", 
+      "pelican", "woodpecker", "robin", "bluejay", "canary", "lorikeet", "jay", "magpie", "cuckoo", "kingfisher", 
+      "hornbill", "heron", "gull", "puffin", "kite", "partridge", "quail", "pheasant", "grouse", "swallow", "warbler", 
+      "thrush", "lark", "nightingale", "starling", "crow", "raven", "ostrich", "emu", "cassowary", "kiwi", "penguin",
+      "bunting", "stork", "spoonbill", "egret", "bittern", "coot", "white stork", "black stork", "stork", "egret",
+      "heron", "bittern", "ibis", "spoonbill", "flamingo", "crane", "limpkin"
+    ];
+    
+    const topPrediction = predictions[0];
+    if (!topPrediction) return false;
+
+    const isTopNonBird = [
+      "web site", "website", "screen", "monitor", "cellular telephone", "handheld computer", "notebook",
+      "laptop", "envelope", "packet", "carton", "menu", "slide rule", "comic book", "book jacket",
+      "photocopy", "modem", "jersey", "t-shirt", "face", "man", "woman", "person", "groom"
+    ].some(term => topPrediction.className.toLowerCase().includes(term));
+    
+    if (isTopNonBird && topPrediction.probability > 0.35) {
+      return false;
+    }
+    
+    const hasBird = predictions.some((pred: any) => 
+      birdKeywords.some(keyword => pred.className.toLowerCase().includes(keyword))
+    );
+    
+    return hasBird;
+  } catch (error) {
+    console.error("Error during MobileNet bird verification:", error);
+    return true;
+  }
+};
+
 const CameraPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -218,6 +276,23 @@ const CameraPage = () => {
 
       // Verification for images: check if the returned classification matches a bird
       if (!isAudio) {
+        const isValidBird = await new Promise<boolean>((resolve) => {
+          const img = new Image();
+          img.src = URL.createObjectURL(file as File);
+          img.onload = async () => {
+            const result = await verifyBirdImage(img);
+            URL.revokeObjectURL(img.src);
+            resolve(result);
+          };
+          img.onerror = () => {
+            resolve(true); // Fallback on image loading error
+          };
+        });
+
+        if (!isValidBird) {
+          throw new Error("The uploaded image does not appear to contain a bird. (Detected non-bird content)");
+        }
+
         if (
           data.is_bird === false ||
           (data.confidence !== undefined && data.confidence < 0.45) ||
