@@ -140,7 +140,6 @@ add column if not exists new_message_email_notifications boolean not null defaul
 drop policy if exists "profiles_select_all" on public.profiles;
 create policy "profiles_select_all"
 on public.profiles for select
-to authenticated
 using (true);
 
 drop policy if exists "profiles_insert_own" on public.profiles;
@@ -159,7 +158,6 @@ with check (auth.uid() = id);
 drop policy if exists "posts_select_all" on public.posts;
 create policy "posts_select_all"
 on public.posts for select
-to authenticated
 using (true);
 
 drop policy if exists "posts_insert_own" on public.posts;
@@ -184,7 +182,6 @@ using (auth.uid() = author_id);
 drop policy if exists "post_likes_select_all" on public.post_likes;
 create policy "post_likes_select_all"
 on public.post_likes for select
-to authenticated
 using (true);
 
 drop policy if exists "post_likes_insert_own" on public.post_likes;
