@@ -101,7 +101,7 @@ const FeedPage = () => {
             <img 
               src="/avian-map-final-logo.jpeg" 
               alt="Avian Map Logo" 
-              className="h-14 w-14 rounded-full border border-border/80 shadow-sm object-cover mb-2"
+              className="h-12 w-auto rounded-xl object-contain mix-blend-multiply mb-2"
             />
             <h1 className="font-display text-2xl font-bold">Avian Map</h1>
             <p className="text-[10px] text-muted-foreground mt-0.5">
