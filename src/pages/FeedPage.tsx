@@ -661,7 +661,19 @@ export const FeedCard = ({
             <MessageCircle className={`h-4 w-4 ${showComments ? "text-primary" : "text-muted-foreground"}`} />
             <span>Comment</span>
           </Button>
-          <Share2 className="ml-auto h-4 w-4 text-muted-foreground" />
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/posts/${post.id}`);
+              toast({
+                title: "Link copied!",
+                description: "Sighting link copied to clipboard.",
+              });
+            }}
+            className="ml-auto p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
         </div>
 
         {post.note && <p className="text-sm leading-6">{post.note}</p>}
@@ -878,8 +890,14 @@ export const VideoCard = ({
           videoEl.play()
             .then(() => setIsPlaying(true))
             .catch((err) => {
-              console.log("Autoplay blocked or failed:", err);
-              setIsPlaying(false);
+              console.log("Autoplay unmuted failed, retrying muted:", err);
+              videoEl.muted = true;
+              videoEl.play()
+                .then(() => setIsPlaying(true))
+                .catch((e) => {
+                  console.error("Autoplay muted also failed:", e);
+                  setIsPlaying(false);
+                });
             });
         } else {
           videoEl.pause();

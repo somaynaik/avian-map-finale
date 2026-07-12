@@ -898,3 +898,17 @@ export async function updatePost(postId: string, updates: {
   if (error) throw error;
   return data as Post;
 }
+
+export async function getFeedPost(postId: string, currentUserId: string): Promise<FeedPost | null> {
+  const { data: post, error } = await supabase
+    .from("posts")
+    .select("*")
+    .eq("id", postId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!post) return null;
+
+  const hydrated = await hydrateFeedPosts([post], currentUserId);
+  return hydrated[0] || null;
+}
