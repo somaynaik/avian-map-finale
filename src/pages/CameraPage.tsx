@@ -30,13 +30,34 @@ const loadScript = (src: string): Promise<void> => {
   });
 };
 
+let loadedModel: any = null;
+let modelPromise: Promise<any> | null = null;
+
+const preloadModel = async () => {
+  if (loadedModel) return loadedModel;
+  if (modelPromise) return modelPromise;
+
+  modelPromise = (async () => {
+    try {
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js");
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js");
+      // @ts-ignore
+      const model = await window.mobilenet.load({ version: 2, alpha: 1.0 });
+      loadedModel = model;
+      return model;
+    } catch (err) {
+      console.error("Failed to load MobileNet model:", err);
+      modelPromise = null;
+      throw err;
+    }
+  })();
+
+  return modelPromise;
+};
+
 const verifyBirdImage = async (imgElement: HTMLImageElement): Promise<boolean> => {
   try {
-    await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js");
-    await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js");
-    
-    // @ts-ignore
-    const model = await window.mobilenet.load({ version: 2, alpha: 1.0 });
+    const model = await preloadModel();
     const predictions = await model.classify(imgElement);
     console.log("MobileNet Predictions:", predictions);
     
@@ -139,6 +160,8 @@ const CameraPage = () => {
   }, [videoFile]);
 
   useEffect(() => {
+    preloadModel().catch((err) => console.error("Error preloading MobileNet model:", err));
+
     return () => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
