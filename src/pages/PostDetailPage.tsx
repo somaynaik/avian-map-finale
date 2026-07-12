@@ -88,7 +88,18 @@ const PostDetailPage = () => {
       )}
 
       <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl px-4 py-4 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(user ? -1 : "/feed")} className="rounded-full shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            if (user) {
+              navigate(-1);
+            } else {
+              navigate("/feed");
+            }
+          }}
+          className="rounded-full shrink-0"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="font-display text-lg font-bold">Bird Sighting</h1>
