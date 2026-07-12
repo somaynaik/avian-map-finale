@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import { Camera, Loader2, LogOut, Save, Settings, X, ChevronDown, LayoutGrid, Play, Contact } from "lucide-react";
+import { Camera, Loader2, LogOut, Save, Settings, X, ChevronDown, LayoutGrid, Play, Contact, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -411,11 +411,18 @@ const ProfilePage = () => {
                     onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
-                    <img
-                      src={post.image_url}
-                      alt={post.species_name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
+                    {post.image_url.includes("postimg.cc") && post.latitude != null && post.longitude != null ? (
+                      <div className="h-full w-full bg-primary/5 flex flex-col items-center justify-center text-primary border border-primary/20">
+                        <MapPin className="h-7 w-7 mb-1 text-primary" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Map Sighting</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={post.image_url}
+                        alt={post.species_name}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    )}
                     {/* Overlay on hover */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-2 text-white">
                       <p className="text-[10px] sm:text-xs font-semibold truncate">{post.species_name}</p>
@@ -479,6 +486,11 @@ const ProfilePage = () => {
                         playsInline
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
+                    ) : post.image_url.includes("postimg.cc") && post.latitude != null && post.longitude != null ? (
+                      <div className="h-full w-full bg-primary/5 flex flex-col items-center justify-center text-primary border border-primary/20">
+                        <MapPin className="h-7 w-7 mb-1 text-primary" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Map Sighting</span>
+                      </div>
                     ) : (
                       <img
                         src={post.image_url}

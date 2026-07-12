@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical, Volume2, VolumeX } from "lucide-react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -342,6 +344,48 @@ const FeedPage = () => {
     </div>
   );
 };
+const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesName: string }) => {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    try {
+      const map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+        center: [lng, lat],
+        zoom: 13,
+        attributionControl: false,
+        dragPan: false,
+        scrollZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+      });
+
+      new maplibregl.Marker({ color: "#16a34a" })
+        .setLngLat([lng, lat])
+        .addTo(map);
+
+      mapRef.current = map;
+    } catch (err) {
+      console.error("Error loading post mini map:", err);
+    }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [lat, lng]);
+
+  return (
+    <div ref={mapContainerRef} className="h-full w-full bg-muted" />
+  );
+};
+
 export const FeedCard = ({
   post,
   index,
@@ -430,6 +474,9 @@ export const FeedCard = ({
     },
   });
 
+  const isFallbackImage = post.image_url.includes("postimg.cc") || post.image_url.includes("avian-map-final-logo");
+  const showLocationMap = isFallbackImage && post.latitude != null && post.longitude != null;
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
@@ -477,10 +524,12 @@ export const FeedCard = ({
       <div className="relative aspect-[4/3] overflow-hidden bg-muted flex items-center justify-center">
         {isVideoUrl(post.image_url) ? (
           <video src={post.image_url} controls playsInline className="h-full w-full object-cover" />
+        ) : showLocationMap ? (
+          <PostMap lat={post.latitude!} lng={post.longitude!} speciesName={post.species_name} />
         ) : (
           <img src={post.image_url} alt={post.species_name} className="h-full w-full object-cover" />
         )}
-        <div className="absolute left-3 top-3 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+        <div className="absolute left-3 top-3 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground z-10">
           {post.species_name}
         </div>
       </div>
