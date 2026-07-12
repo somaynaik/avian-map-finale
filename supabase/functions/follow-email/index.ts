@@ -80,7 +80,7 @@ Deno.serve(async () => {
       html = `
         <div style="font-family: Arial, sans-serif; line-height: 1.5;">
           <h2>You have a new follower</h2>
-          <p><strong>${actorName}</strong> just followed you on Feather Finder.</p>
+          <p><strong>${actorName}</strong> just followed you on Avian Map.</p>
           <p>Open the app to view their profile or send them a message.</p>
         </div>
       `;
@@ -91,7 +91,7 @@ Deno.serve(async () => {
       html = `
         <div style="font-family: Arial, sans-serif; line-height: 1.5;">
           <h2>New message from ${actorName}</h2>
-          <p>You have received a new direct message from <strong>${actorName}</strong> on Feather Finder.</p>
+          <p>You have received a new direct message from <strong>${actorName}</strong> on Avian Map.</p>
           <p style="padding: 12px; background: #f4f4f5; border-radius: 8px; font-style: italic; color: #3f3f46;">
             "${snippet}"
           </p>
