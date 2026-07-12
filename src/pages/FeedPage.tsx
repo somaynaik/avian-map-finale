@@ -677,19 +677,24 @@ export const VideoCard = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Auto-pause video when it scrolls out of viewport visibility threshold
+  // Auto-play video when it scrolls into view, and auto-pause when it scrolls out
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting) {
+        if (entry.isIntersecting) {
+          videoEl.currentTime = 0;
+          videoEl.play().catch((err) => {
+            console.log("Autoplay blocked or failed:", err);
+          });
+        } else {
           videoEl.pause();
         }
       },
       {
-        threshold: 0.4
+        threshold: 0.6
       }
     );
 
@@ -773,6 +778,7 @@ export const VideoCard = ({
         controls
         playsInline
         loop
+        muted
         className="h-full w-full object-contain bg-black"
       />
 
