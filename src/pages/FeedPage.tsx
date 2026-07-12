@@ -103,7 +103,6 @@ const FeedPage = () => {
               alt="Avian Map Logo" 
               className="h-12 w-auto rounded-xl object-contain mix-blend-multiply mb-2"
             />
-            <h1 className="font-display text-2xl font-bold">Avian Map</h1>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               Unleash The Birdwatcher Within You...
             </p>
