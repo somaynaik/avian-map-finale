@@ -347,6 +347,46 @@ const FeedPage = () => {
 const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesName: string }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [birdInfo, setBirdInfo] = useState<{
+    title: string;
+    description: string;
+    imgUrl: string | null;
+    wikiUrl: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchBirdData = async () => {
+      try {
+        const match = speciesName.match(/\(([^)]+)\)/);
+        const nameToSearch = match ? match[1] : speciesName;
+
+        const formattedName = nameToSearch
+          .split(" ")
+          .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+          .join("_");
+
+        const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(formattedName)}`);
+        if (response.ok && isMounted) {
+          const data = await response.json();
+          setBirdInfo({
+            title: data.title || speciesName,
+            description: data.extract || "No description available.",
+            imgUrl: data.thumbnail?.source || null,
+            wikiUrl: data.content_urls?.desktop?.page || null,
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching bird wiki summary:", err);
+      }
+    };
+
+    fetchBirdData();
+    return () => {
+      isMounted = false;
+    };
+  }, [speciesName]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -364,7 +404,19 @@ const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesN
         boxZoom: false,
       });
 
-      new maplibregl.Marker({ color: "#16a34a" })
+      const el = document.createElement("div");
+      el.className = "custom-marker-pin cursor-pointer flex items-center justify-center";
+      el.innerHTML = `
+        <div class="h-9 w-9 bg-primary/10 rounded-full flex items-center justify-center border border-primary/20 backdrop-blur-sm">
+          <div class="h-5 w-5 bg-primary rounded-full border-2 border-white shadow-md animate-pulse"></div>
+        </div>
+      `;
+
+      el.addEventListener("click", () => {
+        setShowOverlay(true);
+      });
+
+      new maplibregl.Marker({ element: el })
         .setLngLat([lng, lat])
         .addTo(map);
 
@@ -382,7 +434,57 @@ const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesN
   }, [lat, lng]);
 
   return (
-    <div ref={mapContainerRef} className="h-full w-full bg-muted" />
+    <div className="relative h-full w-full">
+      <div ref={mapContainerRef} className="h-full w-full bg-muted" />
+      
+      {showOverlay && (
+        <div className="absolute bottom-3 left-3 right-3 bg-background/95 backdrop-blur-md p-3 rounded-2xl border border-border shadow-lg z-10 flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          {!birdInfo ? (
+            <div className="flex items-center justify-center w-full py-4 gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span>Fetching bird details...</span>
+            </div>
+          ) : (
+            <>
+              {birdInfo.imgUrl && (
+                <img
+                  src={birdInfo.imgUrl}
+                  alt={birdInfo.title}
+                  className="h-16 w-16 rounded-xl object-cover bg-muted shrink-0 border border-border/40"
+                />
+              )}
+              <div className="min-w-0 flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-bold leading-tight truncate">{speciesName}</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowOverlay(false)}
+                      className="text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground line-clamp-2 mt-1 leading-normal">
+                    {birdInfo.description}
+                  </p>
+                </div>
+                {birdInfo.wikiUrl && (
+                  <a
+                    href={birdInfo.wikiUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[9px] font-semibold text-primary hover:underline mt-1.5 self-start"
+                  >
+                    Read more on Wikipedia →
+                  </a>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
