@@ -493,11 +493,13 @@ export const FeedCard = ({
   index,
   onToggleLike,
   isPending,
+  onInteractionIntercept,
 }: {
   post: FeedPost;
   index: number;
   onToggleLike: () => void;
   isPending: boolean;
+  onInteractionIntercept?: () => void;
 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -643,7 +645,13 @@ export const FeedCard = ({
             variant="ghost"
             size="sm"
             disabled={isPending}
-            onClick={onToggleLike}
+            onClick={() => {
+              if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else {
+                onToggleLike();
+              }
+            }}
             className="px-0"
           >
             <Heart
@@ -655,7 +663,13 @@ export const FeedCard = ({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setShowComments(!showComments)}
+            onClick={() => {
+              if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else {
+                setShowComments(!showComments);
+              }
+            }}
             className="px-0"
           >
             <MessageCircle className={`h-4 w-4 ${showComments ? "text-primary" : "text-muted-foreground"}`} />
@@ -854,12 +868,14 @@ export const VideoCard = ({
   isPending,
   isMuted,
   onToggleMute,
+  onInteractionIntercept,
 }: {
   video: any;
   onToggleLike: () => void;
   isPending: boolean;
   isMuted: boolean;
   onToggleMute: () => void;
+  onInteractionIntercept?: () => void;
 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -1061,7 +1077,13 @@ export const VideoCard = ({
         {/* Like Button */}
         <div className="flex flex-col items-center">
           <button
-            onClick={onToggleLike}
+            onClick={() => {
+              if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else {
+                onToggleLike();
+              }
+            }}
             disabled={isPending}
             className={`p-3 rounded-full bg-black/40 hover:bg-black/60 transition-colors shadow-md backdrop-blur-sm ${
               video.liked_by_me ? "text-destructive" : "text-white"
@@ -1075,7 +1097,13 @@ export const VideoCard = ({
         {/* Comment Button */}
         <div className="flex flex-col items-center">
           <button
-            onClick={() => setShowComments(!showComments)}
+            onClick={() => {
+              if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else {
+                setShowComments(!showComments);
+              }
+            }}
             className={`p-3 rounded-full bg-black/40 hover:bg-black/60 transition-colors shadow-md backdrop-blur-sm ${
               showComments ? "text-primary" : "text-white"
             }`}
