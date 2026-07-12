@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical } from "lucide-react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -676,6 +676,15 @@ export const VideoCard = ({
   const [showComments, setShowComments] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+
+  // Sync muted property to handle WebView / browser programmatically
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
 
   // Auto-play video when it scrolls into view, and auto-pause when it scrolls out
   useEffect(() => {
@@ -686,11 +695,15 @@ export const VideoCard = ({
       ([entry]) => {
         if (entry.isIntersecting) {
           videoEl.currentTime = 0;
-          videoEl.play().catch((err) => {
-            console.log("Autoplay blocked or failed:", err);
-          });
+          videoEl.play()
+            .then(() => setIsPlaying(true))
+            .catch((err) => {
+              console.log("Autoplay blocked or failed:", err);
+              setIsPlaying(false);
+            });
         } else {
           videoEl.pause();
+          setIsPlaying(false);
         }
       },
       {
@@ -706,6 +719,20 @@ export const VideoCard = ({
       }
     };
   }, []);
+
+  const handleVideoClick = () => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    if (videoEl.paused) {
+      videoEl.play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => console.log("Failed to play on click:", err));
+    } else {
+      videoEl.pause();
+      setIsPlaying(false);
+    }
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [editSpecies, setEditSpecies] = useState(video.species_name);
@@ -775,12 +802,39 @@ export const VideoCard = ({
       <video
         ref={videoRef}
         src={video.video_url || video.image_url}
-        controls
         playsInline
         loop
-        muted
-        className="h-full w-full object-contain bg-black"
+        muted={isMuted}
+        onClick={handleVideoClick}
+        className="h-full w-full object-contain bg-black cursor-pointer"
       />
+
+      {/* Play/Pause Central Overlay */}
+      {!isPlaying && (
+        <div 
+          onClick={handleVideoClick}
+          className="absolute inset-0 flex items-center justify-center bg-black/25 z-20 cursor-pointer animate-in fade-in duration-200"
+        >
+          <div className="p-5 rounded-full bg-black/50 text-white backdrop-blur-sm hover:scale-110 transition-transform">
+            <Play className="h-10 w-10 fill-current" />
+          </div>
+        </div>
+      )}
+
+      {/* Custom Volume Toggle Overlay */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsMuted(!isMuted);
+        }}
+        className="absolute top-4 right-4 z-20 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors shadow-md backdrop-blur-sm"
+      >
+        {isMuted ? (
+          <VolumeX className="h-5 w-5" />
+        ) : (
+          <Volume2 className="h-5 w-5" />
+        )}
+      </button>
 
       {/* Gradient Overlay for Readability */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none z-10" />
