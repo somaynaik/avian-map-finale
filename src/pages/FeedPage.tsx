@@ -45,6 +45,7 @@ const FeedPage = () => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"posts" | "videos">("posts");
   const [showNotifications, setShowNotifications] = useState(false);
+  const [feedMuted, setFeedMuted] = useState(false);
   const [lastViewed, setLastViewed] = useState<string | null>(() =>
     localStorage.getItem(`last_viewed_notifications_${user?.id}`)
   );
@@ -219,6 +220,8 @@ const FeedPage = () => {
                           likeMutation.mutate({ postId: video.id, liked: video.liked_by_me })
                         }
                         isPending={likeMutation.isPending}
+                        isMuted={feedMuted}
+                        onToggleMute={() => setFeedMuted(!feedMuted)}
                       />
                     ))}
                   </div>
@@ -663,10 +666,14 @@ export const VideoCard = ({
   video,
   onToggleLike,
   isPending,
+  isMuted,
+  onToggleMute,
 }: {
   video: any;
   onToggleLike: () => void;
   isPending: boolean;
+  isMuted: boolean;
+  onToggleMute: () => void;
 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -677,7 +684,6 @@ export const VideoCard = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true);
 
   // Sync muted property to handle WebView / browser programmatically
   useEffect(() => {
@@ -825,9 +831,9 @@ export const VideoCard = ({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          setIsMuted(!isMuted);
+          onToggleMute();
         }}
-        className="absolute top-4 right-4 z-20 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors shadow-md backdrop-blur-sm"
+        className="absolute top-4 left-4 z-20 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors shadow-md backdrop-blur-sm"
       >
         {isMuted ? (
           <VolumeX className="h-5 w-5" />
