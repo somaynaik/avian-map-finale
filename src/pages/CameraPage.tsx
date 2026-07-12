@@ -93,7 +93,8 @@ const CameraPage = () => {
   const [note, setNote] = useState("");
   const [predictedSpecies, setPredictedSpecies] = useState<string | null>(null);
   const [taggedUserIds, setTaggedUserIds] = useState<string[]>([]);
- 
+  const [tagSearchQuery, setTagSearchQuery] = useState("");
+
   // Location pin state
   const [pinLocation, setPinLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showMap, setShowMap] = useState(false);
@@ -103,6 +104,13 @@ const CameraPage = () => {
     queryKey: ["all-users-to-tag", user?.id],
     queryFn: () => listUsers(user!.id, ""),
     enabled: !!user?.id,
+  });
+
+  const filteredUsers = allUsers.filter(u => {
+    const search = tagSearchQuery.toLowerCase();
+    const fullName = (u.full_name || "").toLowerCase();
+    const username = (u.username || "").toLowerCase();
+    return fullName.includes(search) || username.includes(search);
   });
   const miniMapContainerRef = useRef<HTMLDivElement>(null);
   const miniMapRef = useRef<maplibregl.Map | null>(null);
@@ -791,13 +799,22 @@ const CameraPage = () => {
             )}
           </div>
           
-          <div className="rounded-2xl border border-border bg-card p-3 max-h-48 overflow-y-auto space-y-2">
+          <div className="rounded-2xl border border-border bg-card p-3 space-y-2">
             <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-1">Select users to tag</p>
-            {allUsers.length === 0 ? (
-              <p className="text-xs text-muted-foreground px-1">No other users found</p>
-            ) : (
-              <div className="space-y-1">
-                {allUsers.map((u) => {
+            <Input
+              type="text"
+              value={tagSearchQuery}
+              onChange={(e) => setTagSearchQuery(e.target.value)}
+              placeholder="Search usernames..."
+              className="h-8 text-xs rounded-lg px-2.5 py-1 bg-muted/40 border-border focus-visible:ring-1 focus-visible:ring-primary"
+            />
+            <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+              {allUsers.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-1 py-1">No other users found</p>
+              ) : filteredUsers.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-1 py-1">No users match "{tagSearchQuery}"</p>
+              ) : (
+                filteredUsers.map((u) => {
                   const isTagged = taggedUserIds.includes(u.id);
                   return (
                     <button
@@ -831,9 +848,9 @@ const CameraPage = () => {
                       </div>
                     </button>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
           </div>
         </div>
 
