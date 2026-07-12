@@ -96,10 +96,17 @@ const FeedPage = () => {
     <div className="min-h-screen bg-background pb-24">
       {/* Sticky Header and Tab Selector */}
       <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="px-4 pb-3 pt-12 flex items-start justify-between">
+        <div className="px-4 pb-3 pt-8 flex items-start justify-between">
           <div>
+            <img 
+              src="/avian-map-final-logo.jpeg" 
+              alt="Avian Map Logo" 
+              className="h-8 w-8 rounded-full border border-border/80 shadow-sm object-cover mb-1.5"
+            />
             <h1 className="font-display text-2xl font-bold">Avian Map</h1>
-            <p className="text-sm text-muted-foreground">Unleash The Birdwatcher Within You...</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Unleash The Birdwatcher Within You...
+            </p>
           </div>
           <button
             onClick={handleOpenNotifications}
