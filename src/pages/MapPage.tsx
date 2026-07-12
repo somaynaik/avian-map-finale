@@ -138,6 +138,7 @@ const MapPage = () => {
   const communityMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
   const routePopupRef = useRef<maplibregl.Popup | null>(null);
+  const activePopupRef = useRef<maplibregl.Popup | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -601,7 +602,7 @@ const MapPage = () => {
     Object.entries(groupedByLocation).forEach(([locId, locSightings]) => {
       const firstSighting = locSightings[0];
       const count = locSightings.length;
-      const key = `loc-${locId}-${firstSighting.obsDt}`;
+      const key = `loc-${locId}`;
 
       const el = document.createElement("div");
       
@@ -631,8 +632,10 @@ const MapPage = () => {
       });
 
       // Build scrollable list of species observed at this specific coordinate
-      const speciesListHtml = locSightings.map(s => `
-        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f3f4f6; text-align: left;">
+      const speciesListHtml = locSightings.map((s, idx) => {
+        const isSelected = selectedSighting && selectedSighting.locId === s.locId && selectedSighting.speciesCode === s.speciesCode;
+        return `
+        <div class="bird-popup-row cursor-pointer" data-index="${idx}" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 6px; border-bottom: 1px solid #f3f4f6; text-align: left; cursor: pointer; transition: all 0.2s; border-radius: 6px; ${isSelected ? 'background-color: rgba(31, 93, 59, 0.08); border-left: 3px solid #1F5D3B; padding-left: 4px;' : 'border-left: 3px solid transparent;'}">
           <img class="bird-popup-img-${s.speciesCode}" src="" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: none; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05); flex-shrink: 0;" />
           <div class="bird-popup-placeholder-${s.speciesCode}" style="width: 36px; height: 36px; border-radius: 50%; background-color: rgba(31, 93, 59, 0.1); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
             🐦
@@ -649,7 +652,7 @@ const MapPage = () => {
             </span>
           </div>
         </div>
-      `).join('');
+      `}).join('');
 
       const popup = new maplibregl.Popup({
         offset: 25,
@@ -657,6 +660,11 @@ const MapPage = () => {
         closeOnClick: false,
         maxWidth: '280px',
       }).setHTML(`
+        <style>
+          .bird-popup-row:hover {
+            background-color: rgba(31, 93, 59, 0.04);
+          }
+        </style>
         <div style="padding: 10px; font-family: system-ui, -apple-system, sans-serif; max-height: 300px; overflow-y: auto;">
           <h3 style="margin: 0 0 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; text-align: left; border-bottom: 2px solid #1F5D3B; padding-bottom: 3px;">
             📍 ${firstSighting.locName.split(',')[0]}
@@ -668,6 +676,41 @@ const MapPage = () => {
       `);
 
       popup.on('open', () => {
+        if (activePopupRef.current && activePopupRef.current !== popup) {
+          activePopupRef.current.remove();
+        }
+        activePopupRef.current = popup;
+
+        // Add click listener to bird cards inside the popup
+        const popupNode = popup.getElement();
+        if (popupNode) {
+          const rows = popupNode.querySelectorAll('.bird-popup-row');
+          rows.forEach((row) => {
+            row.addEventListener('click', () => {
+              const idxAttr = row.getAttribute('data-index');
+              if (idxAttr !== null) {
+                const idx = parseInt(idxAttr, 10);
+                const sighting = locSightings[idx];
+                if (sighting) {
+                  setSelectedSighting(sighting);
+                  
+                  // Update visual selection styles in popup dynamically
+                  rows.forEach((r) => {
+                    const el = r as HTMLElement;
+                    el.style.backgroundColor = 'transparent';
+                    el.style.borderLeft = '3px solid transparent';
+                    el.style.paddingLeft = '6px';
+                  });
+                  const clickedEl = row as HTMLElement;
+                  clickedEl.style.backgroundColor = 'rgba(31, 93, 59, 0.08)';
+                  clickedEl.style.borderLeft = '3px solid #1F5D3B';
+                  clickedEl.style.paddingLeft = '4px';
+                }
+              }
+            });
+          });
+        }
+
         locSightings.forEach(async (s) => {
           if (!s.sciName) return;
           const cacheKey = s.sciName.toLowerCase().trim();
@@ -711,6 +754,9 @@ const MapPage = () => {
       });
       
       popup.on('close', () => {
+        if (activePopupRef.current === popup) {
+          activePopupRef.current = null;
+        }
         setSelectedSighting(current => {
           if (!current) return null;
           const isSameLoc = locSightings.some(ls => ls.locId === current.locId);
@@ -793,6 +839,19 @@ const MapPage = () => {
         </div>
       `);
 
+      popup.on('open', () => {
+        if (activePopupRef.current && activePopupRef.current !== popup) {
+          activePopupRef.current.remove();
+        }
+        activePopupRef.current = popup;
+      });
+
+      popup.on('close', () => {
+        if (activePopupRef.current === popup) {
+          activePopupRef.current = null;
+        }
+      });
+
       const marker = new maplibregl.Marker({
         element: el,
         anchor: 'center',
@@ -832,8 +891,7 @@ const MapPage = () => {
     });
 
     Object.entries(groupedByLocation).forEach(([locId, locSightings]) => {
-      const firstSighting = locSightings[0];
-      const key = `loc-${locId}-${firstSighting.obsDt}`;
+      const key = `loc-${locId}`;
       const marker = markersRef.current.get(key);
       
       if (marker) {
@@ -1128,7 +1186,8 @@ const MapPage = () => {
                           zoom: 12,
                           duration: 1500,
                         });
-                        const key = `${latestObservation.locId}-${latestObservation.speciesCode}-${latestObservation.obsDt}`;
+                        const locKey = latestObservation.locId || `${latestObservation.lat.toFixed(4)},${latestObservation.lng.toFixed(4)}`;
+                        const key = `loc-${locKey}`;
                         const marker = markersRef.current.get(key);
                         if (marker && map.current) {
                           marker.getPopup().addTo(map.current);

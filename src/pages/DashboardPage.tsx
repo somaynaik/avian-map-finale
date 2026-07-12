@@ -122,6 +122,17 @@ export const DashboardPage = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRarity, setFilterRarity] = useState<"all" | "rare" | "common">("all");
+  const [hoveredBirdName, setHoveredBirdName] = useState<string | null>(null);
+  const [clickedBirdName, setClickedBirdName] = useState<string | null>(null);
+
+  // Close clicked bird name tooltip on click outside
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setClickedBirdName(null);
+    };
+    window.addEventListener("click", handleGlobalClick);
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, []);
 
   const miniMapContainer = useRef<HTMLDivElement>(null);
   const miniMap = useRef<maplibregl.Map | null>(null);
@@ -560,7 +571,38 @@ export const DashboardPage = () => {
                             transform: "translate(-50%, -50%)"
                           }}
                         >
-                          <div className="flex flex-col items-center group cursor-pointer">
+                          <div 
+                            className="flex flex-col items-center group cursor-pointer relative"
+                            onMouseEnter={() => setHoveredBirdName(item.comName)}
+                            onMouseLeave={() => setHoveredBirdName(null)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClickedBirdName(clickedBirdName === item.comName ? null : item.comName);
+                            }}
+                          >
+                            {(hoveredBirdName === item.comName || clickedBirdName === item.comName) && (
+                              item.y < -70 ? (
+                                <div className="absolute top-full mt-7 flex flex-col-reverse items-center pointer-events-none z-30 animate-in fade-in slide-in-from-top-1 duration-150">
+                                  <div className="bg-[#1F5D3B]/95 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl shadow-lg border border-white/10 text-center whitespace-nowrap">
+                                    <div className="font-semibold text-xs leading-none mb-0.5">{item.comName}</div>
+                                    {item.sciName && (
+                                      <div className="text-[9px] text-white/80 italic leading-none font-medium mt-0.5">{item.sciName}</div>
+                                    )}
+                                  </div>
+                                  <div className="w-1.5 h-1.5 bg-[#1F5D3B]/95 rotate-45 -mb-1 border-l border-t border-white/10" />
+                                </div>
+                              ) : (
+                                <div className="absolute bottom-full mb-2.5 flex flex-col items-center pointer-events-none z-30 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                                  <div className="bg-[#1F5D3B]/95 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl shadow-lg border border-white/10 text-center whitespace-nowrap">
+                                    <div className="font-semibold text-xs leading-none mb-0.5">{item.comName}</div>
+                                    {item.sciName && (
+                                      <div className="text-[9px] text-white/80 italic leading-none font-medium mt-0.5">{item.sciName}</div>
+                                    )}
+                                  </div>
+                                  <div className="w-1.5 h-1.5 bg-[#1F5D3B]/95 rotate-45 -mt-1 border-r border-b border-white/10" />
+                                </div>
+                              )
+                            )}
                             <BirdImage 
                               scientificName={item.sciName} 
                               commonName={item.comName} 
