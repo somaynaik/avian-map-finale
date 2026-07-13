@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Deploy as a Supabase Edge Function, then invoke it from a scheduled job or webhook.
 // Required secrets:
 // - SUPABASE_URL

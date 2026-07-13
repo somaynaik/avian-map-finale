@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical, Volume2, VolumeX } from "lucide-react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical, Volume2, VolumeX, Search } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,6 +48,15 @@ const FeedPage = () => {
   const [activeTab, setActiveTab] = useState<"posts" | "videos">("posts");
   const [showNotifications, setShowNotifications] = useState(false);
   const [feedMuted, setFeedMuted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  const { data: searchResults = [], isLoading: isSearchingUsers } = useQuery({
+    queryKey: ["search-users", searchQuery, user?.id],
+    queryFn: () => listUsers(user!.id, searchQuery),
+    enabled: !!user?.id && searchQuery.trim().length > 0,
+  });
+
   const [lastViewed, setLastViewed] = useState<string | null>(() =>
     localStorage.getItem(`last_viewed_notifications_${user?.id}`)
   );
@@ -98,20 +107,106 @@ const FeedPage = () => {
     <div className="min-h-screen bg-background pb-24">
       {/* Sticky Header and Tab Selector */}
       <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="px-4 pb-3 pt-6 flex items-start justify-between">
-          <div>
+        <div className="px-4 pb-3 pt-6 flex items-center justify-between gap-4">
+          <div className="flex-shrink-0 flex flex-col justify-center">
             <img 
               src="/avian-map-final-logo.jpeg" 
               alt="Avian Map Logo" 
-              className="h-12 w-auto rounded-xl object-contain mix-blend-multiply mb-2"
+              className="h-10 sm:h-12 w-auto rounded-xl object-contain mix-blend-multiply"
             />
-            <p className="text-[10px] text-muted-foreground mt-0.5">
+            <p className="text-[10px] text-muted-foreground mt-0.5 hidden md:block">
               Unleash The Birdwatcher Within You...
             </p>
           </div>
+
+          {/* Search Bar Container */}
+          <div className="flex-1 max-w-sm sm:max-w-md relative">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowSearchResults(true);
+                }}
+                onFocus={() => setShowSearchResults(true)}
+                className="pl-9 pr-8 h-9 w-full bg-muted/40 border-border focus-visible:ring-1 focus-visible:ring-primary rounded-full text-xs sm:text-sm"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setShowSearchResults(false);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 hover:text-foreground text-muted-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Floating Search Results Dropdown */}
+            <AnimatePresence>
+              {showSearchResults && searchQuery.trim().length > 0 && (
+                <>
+                  {/* Backdrop to close search */}
+                  <div 
+                    className="fixed inset-0 z-20" 
+                    onClick={() => setShowSearchResults(false)} 
+                  />
+                  
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute left-0 right-0 top-full mt-2 bg-background border border-border rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto overflow-x-hidden p-1 flex flex-col gap-0.5"
+                  >
+                    {isSearchingUsers ? (
+                      <div className="flex items-center justify-center py-6 text-xs sm:text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Searching...
+                      </div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="py-6 text-center text-xs sm:text-sm text-muted-foreground">
+                        No users found
+                      </div>
+                    ) : (
+                      searchResults.map((userProfile: any) => (
+                        <div
+                          key={userProfile.id}
+                          onClick={() => {
+                            navigate(`/users/${userProfile.id}`);
+                            setShowSearchResults(false);
+                            setSearchQuery("");
+                          }}
+                          className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={userProfile.avatar_url || undefined} />
+                            <AvatarFallback className="text-xs">{getInitials(userProfile)}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-semibold text-foreground truncate">
+                              {userProfile.full_name || userProfile.username}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              @{userProfile.username}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
           <button
             onClick={handleOpenNotifications}
-            className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors mt-1"
+            className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex-shrink-0"
           >
             <Bell className="h-6 w-6" />
             {unreadCount > 0 && (
@@ -866,15 +961,15 @@ export const VideoCard = ({
   video,
   onToggleLike,
   isPending,
-  isMuted,
-  onToggleMute,
+  isMuted: propIsMuted,
+  onToggleMute: propOnToggleMute,
   onInteractionIntercept,
 }: {
   video: any;
   onToggleLike: () => void;
   isPending: boolean;
-  isMuted: boolean;
-  onToggleMute: () => void;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
   onInteractionIntercept?: () => void;
 }) => {
   const { user } = useAuth();
@@ -886,6 +981,10 @@ export const VideoCard = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [internalMuted, setInternalMuted] = useState(false);
+
+  const isMuted = propIsMuted !== undefined ? propIsMuted : internalMuted;
+  const onToggleMute = propOnToggleMute || (() => setInternalMuted(!internalMuted));
 
   // Sync muted property to handle WebView / browser programmatically
   useEffect(() => {
