@@ -65,7 +65,7 @@ function getTimeAgo(dateString: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffHours / 24);
-  
+
   if (diffDays > 0) return `${diffDays}d ago`;
   if (diffHours > 0) return `${diffHours}h ago`;
   return 'Just now';
@@ -76,20 +76,20 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const R = 6371; // Radius of the earth in km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2); 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
 const getSearchTerms = (query: string): string[] => {
   const q = query.toLowerCase().trim();
   if (!q) return [];
-  
+
   const terms = [q];
-  
+
   const synonymMap: Record<string, string[]> = {
     "peacock": ["peafowl", "pavo"],
     "peafowl": ["peacock", "pavo"],
@@ -157,14 +157,24 @@ const MapPage = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-  const [selectedSighting, setSelectedSighting] = useState<RecentObservation | null>(null);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const isClearingMarkersRef = useRef(false);
+  const isClearingCommunityMarkersRef = useRef(false);
+  const lastRouteFetchCoords = useRef<{ lat: number, lng: number } | null>(null);
+  const lastSelectedSightingId = useRef<string | null>(null);
+
+  const [selectedSighting, setSelectedSighting] = useState<(RecentObservation & {
+    id?: string;
+    isCommunity?: boolean;
+    imageUrl?: string;
+    authorName?: string;
+  }) | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [showWeatherDetails, setShowWeatherDetails] = useState(false);
 
   // Active Navigation Guidance States
   const [isNavigating, setIsNavigating] = useState(false);
   const [hasArrived, setHasArrived] = useState(false);
-  const [navigationSteps, setNavigationSteps] = useState<{instruction: string; distance: number; duration: number}[]>([]);
+  const [navigationSteps, setNavigationSteps] = useState<{ instruction: string; distance: number; duration: number }[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
   const [remainingDuration, setRemainingDuration] = useState<number | null>(null);
@@ -254,14 +264,14 @@ const MapPage = () => {
       return [];
     },
     enabled: selectedRegion !== 'NEARBY' || !!userLocation,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: isNavigating ? false : 5 * 60 * 1000,
   });
 
   // Fetch community geo-tagged posts (< 48 hrs old)
   const { data: communityPosts = [] } = useQuery({
     queryKey: ['community-map-posts'],
     queryFn: () => getRecentGeoTaggedPosts(48),
-    refetchInterval: 2 * 60 * 1000, // refresh every 2 min
+    refetchInterval: isNavigating ? false : 2 * 60 * 1000, // refresh every 2 min
   });
 
   // Fetch current weather updates via Open-Meteo
@@ -290,7 +300,7 @@ const MapPage = () => {
 
     let desc = "Clear Sky";
     let icon = "☀️";
-    
+
     if (code === 0) { desc = "Clear Sky"; icon = "☀️"; }
     else if (code >= 1 && code <= 3) { desc = "Partly Cloudy"; icon = "⛅"; }
     else if (code === 45 || code === 48) { desc = "Foggy"; icon = "🌫️"; }
@@ -319,7 +329,7 @@ const MapPage = () => {
     const isNight = hour >= 20 || hour < 6;
     const isMorning = hour >= 6 && hour <= 10;
     const isEvening = hour >= 16 && hour <= 19;
-    
+
     if (isNight) {
       score = 0;
       reasons.push("Night time - low visibility");
@@ -437,7 +447,7 @@ const MapPage = () => {
   // Sync user location marker
   useEffect(() => {
     if (!map.current || !userLocation) return;
-    
+
     if (!userMarkerRef.current) {
       const el = document.createElement('div');
       el.style.cssText = `
@@ -461,6 +471,8 @@ const MapPage = () => {
     if (!map.current) return;
 
     const clearRoute = () => {
+      lastRouteFetchCoords.current = null;
+      lastSelectedSightingId.current = null;
       if (map.current?.getSource('route')) {
         (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({
           type: 'Feature',
@@ -479,19 +491,38 @@ const MapPage = () => {
       return;
     }
 
+    const sightingId = selectedSighting.id || `ebird-${selectedSighting.speciesCode}-${selectedSighting.locId}`;
+    if (sightingId !== lastSelectedSightingId.current) {
+      lastSelectedSightingId.current = sightingId;
+      lastRouteFetchCoords.current = null;
+    }
+
+    if (lastRouteFetchCoords.current && userLocation) {
+      const movedDistance = getDistance(
+        userLocation.lat,
+        userLocation.lng,
+        lastRouteFetchCoords.current.lat,
+        lastRouteFetchCoords.current.lng
+      );
+      if (movedDistance < 0.05 && navigationSteps.length > 0) {
+        return;
+      }
+    }
+
     const fetchRoute = async () => {
       try {
         const { lng: startLng, lat: startLat } = userLocation;
         const { lng: endLng, lat: endLat } = selectedSighting;
         const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`;
-        
+
         const res = await fetch(url);
         const data = await res.json();
-        
+
         if (data.routes && data.routes[0]) {
+          lastRouteFetchCoords.current = { lat: startLat, lng: startLng };
           const route = data.routes[0];
           const coords = route.geometry.coordinates;
-          
+
           if (map.current!.getSource('route')) {
             (map.current!.getSource('route') as maplibregl.GeoJSONSource).setData({
               type: 'Feature',
@@ -537,25 +568,25 @@ const MapPage = () => {
           setNavigationSteps(steps);
           setCurrentStepIndex(0);
 
-          const timeString = durationMin > 60 
-            ? `${Math.floor(durationMin / 60)} hr ${durationMin % 60} min` 
+          const timeString = durationMin > 60
+            ? `${Math.floor(durationMin / 60)} hr ${durationMin % 60} min`
             : `${durationMin} min`;
-            
+
           const midPointIndex = Math.floor(coords.length / 2);
           const midPoint = coords[midPointIndex];
-          
+
           if (routePopupRef.current) {
             routePopupRef.current.remove();
           }
-          
+
           routePopupRef.current = new maplibregl.Popup({
             closeButton: false,
             closeOnClick: false,
             anchor: 'bottom',
             offset: [0, -5],
           })
-          .setLngLat(midPoint)
-          .setHTML(`
+            .setLngLat(midPoint)
+            .setHTML(`
             <div style="padding: 2px 6px; font-family: system-ui, sans-serif; text-align: center; min-width: 80px;">
               <div style="font-weight: 700; font-size: 15px; color: #1f2937; display: flex; align-items: center; justify-content: center; gap: 6px;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #4b5563;"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
@@ -566,7 +597,7 @@ const MapPage = () => {
               </div>
             </div>
           `)
-          .addTo(map.current!);
+            .addTo(map.current!);
         }
       } catch (error) {
         console.error('Error fetching route:', error);
@@ -581,8 +612,10 @@ const MapPage = () => {
     if (!map.current) return;
 
     // Remove old markers when region changes
+    isClearingMarkersRef.current = true;
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current.clear();
+    isClearingMarkersRef.current = false;
 
     if (!sightings.length) return;
 
@@ -605,7 +638,7 @@ const MapPage = () => {
       const key = `loc-${locId}`;
 
       const el = document.createElement("div");
-      
+
       // Style marker. If multiple species are recorded here, show the count of species.
       el.style.cssText = `
         width: 32px; 
@@ -623,7 +656,7 @@ const MapPage = () => {
         color: white;
       `;
       el.textContent = count > 1 ? `${count}` : "🐦";
-      
+
       el.addEventListener('click', () => {
         setSelectedSighting(firstSighting);
         if (isMobile) {
@@ -693,7 +726,7 @@ const MapPage = () => {
                 const sighting = locSightings[idx];
                 if (sighting) {
                   setSelectedSighting(sighting);
-                  
+
                   // Update visual selection styles in popup dynamically
                   rows.forEach((r) => {
                     const el = r as HTMLElement;
@@ -714,7 +747,7 @@ const MapPage = () => {
         locSightings.forEach(async (s) => {
           if (!s.sciName) return;
           const cacheKey = s.sciName.toLowerCase().trim();
-          
+
           const setImg = (url: string) => {
             const imgEls = document.querySelectorAll(`.bird-popup-img-${s.speciesCode}`);
             const placeholderEls = document.querySelectorAll(`.bird-popup-placeholder-${s.speciesCode}`);
@@ -752,26 +785,30 @@ const MapPage = () => {
           }
         });
       });
-      
+
       popup.on('close', () => {
         if (activePopupRef.current === popup) {
           activePopupRef.current = null;
         }
+        if (isClearingMarkersRef.current || isNavigating) {
+          return;
+        }
         setSelectedSighting(current => {
           if (!current) return null;
+          if (current.isCommunity) return current;
           const isSameLoc = locSightings.some(ls => ls.locId === current.locId);
           return isSameLoc ? null : current;
         });
       });
 
-      const marker = new maplibregl.Marker({ 
+      const marker = new maplibregl.Marker({
         element: el,
         anchor: 'center',
       })
         .setLngLat([firstSighting.lng, firstSighting.lat])
         .setPopup(popup)
         .addTo(map.current!);
-      
+
       markersRef.current.set(key, marker);
     });
 
@@ -783,8 +820,10 @@ const MapPage = () => {
     if (!map.current) return;
 
     // Remove old community markers
+    isClearingCommunityMarkersRef.current = true;
     communityMarkersRef.current.forEach(marker => marker.remove());
     communityMarkersRef.current.clear();
+    isClearingCommunityMarkersRef.current = false;
 
     if (!communityPosts.length) return;
 
@@ -809,6 +848,24 @@ const MapPage = () => {
       `;
       el.textContent = "📸";
 
+      el.addEventListener('click', () => {
+        setSelectedSighting({
+          id: `community-${post.id}`,
+          lat: post.latitude,
+          lng: post.longitude,
+          comName: post.species_name,
+          sciName: '',
+          locName: post.location_name || "Community Sighting",
+          speciesCode: `community-${post.id}`,
+          isCommunity: true,
+          imageUrl: post.image_url,
+          authorName: post.author?.username
+        } as any);
+        if (isMobile) {
+          setIsSidebarMinimized(true);
+        }
+      });
+
       const timeAgo = getTimeAgo(post.created_at);
       const username = post.author?.username || 'Unknown';
 
@@ -820,10 +877,10 @@ const MapPage = () => {
       }).setHTML(`
         <div style="font-family: system-ui, sans-serif;">
           ${post.image_url ? (
-            post.image_url.toLowerCase().includes('.mp4') || post.image_url.toLowerCase().includes('.mov') || post.image_url.toLowerCase().includes('.webm')
-              ? `<video src="${post.image_url}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" autoplay muted loop playsinline></video>`
-              : `<img src="${post.image_url}" alt="${post.species_name}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" />`
-          ) : ''}
+          post.image_url.toLowerCase().includes('.mp4') || post.image_url.toLowerCase().includes('.mov') || post.image_url.toLowerCase().includes('.webm')
+            ? `<video src="${post.image_url}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" autoplay muted loop playsinline></video>`
+            : `<img src="${post.image_url}" alt="${post.species_name}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0;" />`
+        ) : ''}
           <div style="padding: 12px;">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
               <span style="background: #e67e22; color: white; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;">Community</span>
@@ -850,6 +907,14 @@ const MapPage = () => {
         if (activePopupRef.current === popup) {
           activePopupRef.current = null;
         }
+        if (isClearingCommunityMarkersRef.current || isNavigating) {
+          return;
+        }
+        setSelectedSighting(current => {
+          if (!current) return null;
+          if (!current.isCommunity) return current;
+          return current.id === `community-${post.id}` ? null : current;
+        });
       });
 
       const marker = new maplibregl.Marker({
@@ -893,7 +958,7 @@ const MapPage = () => {
     Object.entries(groupedByLocation).forEach(([locId, locSightings]) => {
       const key = `loc-${locId}`;
       const marker = markersRef.current.get(key);
-      
+
       if (marker) {
         const matches = locSightings.some(s => matchSearch(searchQuery, s.comName, s.sciName));
         const el = marker.getElement();
@@ -939,20 +1004,19 @@ const MapPage = () => {
             animate={{ x: 0, y: 0 }}
             exit={isMobile ? { y: "100%", x: 0 } : { x: -320, y: 0 }}
             transition={{ type: "spring", damping: 25 }}
-            className={`absolute bottom-[var(--nav-height)] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none transition-all duration-300 ${
-              isMobile && isSidebarMinimized ? "h-[70px] overflow-hidden" : "h-[45vh]"
-            }`}
+            className={`absolute bottom-[var(--nav-height)] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none transition-all duration-300 ${isMobile && isSidebarMinimized ? "h-[70px] overflow-hidden" : "h-[45vh]"
+              }`}
           >
             {/* Pull / drag handle bar for mobile */}
             {isMobile && (
-              <div 
+              <div
                 onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
-                className="w-12 h-1 bg-muted-foreground/30 hover:bg-muted-foreground/50 rounded-full mx-auto mt-2.5 cursor-pointer shrink-0" 
+                className="w-12 h-1 bg-muted-foreground/30 hover:bg-muted-foreground/50 rounded-full mx-auto mt-2.5 cursor-pointer shrink-0"
               />
             )}
-            
+
             {/* Sidebar Header */}
-            <div 
+            <div
               className="p-4 pt-2 md:pt-4 border-b border-border flex flex-col cursor-pointer md:cursor-default shrink-0"
               onClick={() => {
                 if (isMobile) {
@@ -994,94 +1058,94 @@ const MapPage = () => {
                 </div>
               </div>
             </div>
-              
-              {/* Region Filter - Custom Dropdown */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm flex items-center justify-between hover:border-primary/50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  <div className="flex items-center gap-2">
-                    {selectedRegion === 'NEARBY' ? (
-                      <MapPin className="w-4 h-4 transition-colors" style={{ color: '#1F5D3B' }} />
-                    ) : null}
-                    <span className="font-medium text-[rgba(45,58,51,0.9)] dark:text-slate-200">
-                      {INDIAN_REGIONS.find((r) => r.code === selectedRegion)?.name || 'Select Region'}
-                    </span>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
 
-                <AnimatePresence>
-                  {isDropdownOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -5 }}
-                      transition={{ duration: 0.15, ease: "easeOut" }}
-                      className="absolute top-[calc(100%+8px)] left-0 right-0 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[320px]"
-                    >
-                      <div className="p-2 border-b border-border/50 sticky top-0 bg-card/95 backdrop-blur z-10">
-                        <div className="relative">
-                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
-                          <input
-                            type="text"
-                            placeholder="Search state..."
-                            value={regionSearch}
-                            onChange={(e) => setRegionSearch(e.target.value)}
-                            className="w-full bg-muted/30 border border-transparent focus:border-primary/30 focus:bg-background rounded-lg pl-9 pr-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground/70"
-                          />
-                        </div>
+            {/* Region Filter - Custom Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm flex items-center justify-between hover:border-primary/50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <div className="flex items-center gap-2">
+                  {selectedRegion === 'NEARBY' ? (
+                    <MapPin className="w-4 h-4 transition-colors" style={{ color: '#1F5D3B' }} />
+                  ) : null}
+                  <span className="font-medium text-[rgba(45,58,51,0.9)] dark:text-slate-200">
+                    {INDIAN_REGIONS.find((r) => r.code === selectedRegion)?.name || 'Select Region'}
+                  </span>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              <AnimatePresence>
+                {isDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute top-[calc(100%+8px)] left-0 right-0 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[320px]"
+                  >
+                    <div className="p-2 border-b border-border/50 sticky top-0 bg-card/95 backdrop-blur z-10">
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
+                        <input
+                          type="text"
+                          placeholder="Search state..."
+                          value={regionSearch}
+                          onChange={(e) => setRegionSearch(e.target.value)}
+                          className="w-full bg-muted/30 border border-transparent focus:border-primary/30 focus:bg-background rounded-lg pl-9 pr-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground/70"
+                        />
                       </div>
-                      
-                      <div className="overflow-y-auto p-1 custom-scrollbar">
-                        {/* Near Me Option */}
-                        {('near me'.includes(regionSearch.toLowerCase()) || regionSearch === "") && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setSelectedRegion('NEARBY');
-                                setIsDropdownOpen(false);
-                                setRegionSearch("");
-                              }}
-                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${selectedRegion === 'NEARBY' ? 'bg-[#1F5D3B]/10 text-[#1F5D3B] font-medium' : 'hover:bg-muted text-[rgba(45,58,51,0.8)] dark:text-slate-300'}`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <MapPin className="w-4 h-4" style={{ color: selectedRegion !== 'NEARBY' ? 'currentColor' : '#1F5D3B' }} />
-                                <span>Near Me</span>
-                              </div>
-                              {selectedRegion === 'NEARBY' && <Check className="w-4 h-4" />}
-                            </button>
-                            <div className="h-px bg-border/50 mx-2 my-1" />
-                          </>
-                        )}
+                    </div>
 
-                        {/* Other Regions */}
-                        {INDIAN_REGIONS.filter(r => r.code !== 'NEARBY' && r.name.toLowerCase().includes(regionSearch.toLowerCase())).map((region) => (
+                    <div className="overflow-y-auto p-1 custom-scrollbar">
+                      {/* Near Me Option */}
+                      {('near me'.includes(regionSearch.toLowerCase()) || regionSearch === "") && (
+                        <>
                           <button
-                            key={region.code}
                             onClick={() => {
-                              setSelectedRegion(region.code);
+                              setSelectedRegion('NEARBY');
                               setIsDropdownOpen(false);
                               setRegionSearch("");
                             }}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${selectedRegion === region.code ? 'bg-[#1F5D3B]/10 text-[#1F5D3B] font-medium' : 'hover:bg-muted text-[rgba(45,58,51,0.8)] dark:text-slate-300'}`}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${selectedRegion === 'NEARBY' ? 'bg-[#1F5D3B]/10 text-[#1F5D3B] font-medium' : 'hover:bg-muted text-[rgba(45,58,51,0.8)] dark:text-slate-300'}`}
                           >
-                            <span>{region.name}</span>
-                            {selectedRegion === region.code && <Check className="w-4 h-4 text-[#1F5D3B]" />}
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-4 h-4" style={{ color: selectedRegion !== 'NEARBY' ? 'currentColor' : '#1F5D3B' }} />
+                              <span>Near Me</span>
+                            </div>
+                            {selectedRegion === 'NEARBY' && <Check className="w-4 h-4" />}
                           </button>
-                        ))}
-                        
-                        {INDIAN_REGIONS.filter(r => r.code !== 'NEARBY' && r.name.toLowerCase().includes(regionSearch.toLowerCase())).length === 0 && !('near me'.includes(regionSearch.toLowerCase())) && (
-                          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                            No regions found
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                          <div className="h-px bg-border/50 mx-2 my-1" />
+                        </>
+                      )}
+
+                      {/* Other Regions */}
+                      {INDIAN_REGIONS.filter(r => r.code !== 'NEARBY' && r.name.toLowerCase().includes(regionSearch.toLowerCase())).map((region) => (
+                        <button
+                          key={region.code}
+                          onClick={() => {
+                            setSelectedRegion(region.code);
+                            setIsDropdownOpen(false);
+                            setRegionSearch("");
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${selectedRegion === region.code ? 'bg-[#1F5D3B]/10 text-[#1F5D3B] font-medium' : 'hover:bg-muted text-[rgba(45,58,51,0.8)] dark:text-slate-300'}`}
+                        >
+                          <span>{region.name}</span>
+                          {selectedRegion === region.code && <Check className="w-4 h-4 text-[#1F5D3B]" />}
+                        </button>
+                      ))}
+
+                      {INDIAN_REGIONS.filter(r => r.code !== 'NEARBY' && r.name.toLowerCase().includes(regionSearch.toLowerCase())).length === 0 && !('near me'.includes(regionSearch.toLowerCase())) && (
+                        <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                          No regions found
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Sightings List */}
             <div className="flex-1 overflow-y-auto">
@@ -1108,6 +1172,18 @@ const MapPage = () => {
                           if (marker && map.current) {
                             marker.getPopup().addTo(map.current);
                           }
+                          setSelectedSighting({
+                            id: `community-${post.id}`,
+                            lat: post.latitude,
+                            lng: post.longitude,
+                            comName: post.species_name,
+                            sciName: '',
+                            locName: post.location_name || "Community Sighting",
+                            speciesCode: `community-${post.id}`,
+                            isCommunity: true,
+                            imageUrl: post.image_url,
+                            authorName: post.author?.username
+                          } as any);
                         }
                       }}
                       className="w-full p-3 mb-2 bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/30 dark:hover:bg-orange-950/50 rounded-xl text-left transition-colors border border-orange-200 dark:border-orange-900/50"
@@ -1141,16 +1217,16 @@ const MapPage = () => {
                                 {post.location_name.split(',')[0]}
                               </span>
                             )}
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {getTimeAgo(post.created_at)}
+                            </span>
+                            {userLocation && post.latitude != null && post.longitude != null && (
                               <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {getTimeAgo(post.created_at)}
+                                • {getDistance(userLocation.lat, userLocation.lng, post.latitude, post.longitude).toFixed(1)} km
                               </span>
-                              {userLocation && post.latitude != null && post.longitude != null && (
-                                <span className="flex items-center gap-1">
-                                  • {getDistance(userLocation.lat, userLocation.lng, post.latitude, post.longitude).toFixed(1)} km
-                                </span>
-                              )}
-                            </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </button>
@@ -1253,343 +1329,366 @@ const MapPage = () => {
       <div className="flex-1 relative">
         <div ref={mapContainer} className="absolute inset-0" />
 
-      {/* Loading overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 z-20 bg-background/50 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-card p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Loading bird sightings...</p>
+        {/* Loading overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 z-20 bg-background/50 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-card p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Loading bird sightings...</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Top Search Bar */}
-      {!isNavigating && (
-        <div className="absolute top-0 left-0 right-0 z-10 p-4 pt-12">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center gap-2 bg-card/90 backdrop-blur-lg rounded-full px-4 py-3 shadow-lg border border-border">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search species..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent text-sm flex-1 outline-none placeholder:text-muted-foreground"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="p-1 hover:bg-muted rounded-full transition-colors"
-              >
-                <X className="w-4 h-4 text-muted-foreground" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* Locate button */}
-      <button 
-        onClick={handleLocate}
-        className="absolute bottom-[calc(var(--nav-height)+16px)] right-4 z-10 w-12 h-12 rounded-full bg-primary shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
-      >
-        <Locate className="w-5 h-5 text-primary-foreground" />
-      </button>
-
-      {/* Floating Weather Suitability Widget */}
-      {weatherAnalysis && !isNavigating && (
-        <div className="absolute top-24 right-4 z-10 flex flex-col items-end gap-2">
-          {/* Weather Toggle Button */}
-          <button
-            onClick={() => setShowWeatherDetails(!showWeatherDetails)}
-            className="flex items-center gap-2 px-3 py-2 bg-card/90 backdrop-blur-lg rounded-full shadow-lg border border-border hover:bg-muted transition-colors text-sm font-semibold"
-          >
-            <span className="text-lg">{weatherAnalysis.icon}</span>
-            <span>{weatherAnalysis.temp}°C</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
-              {weatherAnalysis.rating}
-            </span>
-          </button>
-
-          {/* Expanded Weather details */}
-          <AnimatePresence>
-            {showWeatherDetails && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="w-72 bg-card/95 backdrop-blur-md rounded-2xl shadow-xl border border-border p-4 text-left space-y-3"
-              >
-                <div className="flex items-center justify-between border-b border-border pb-2">
-                  <span className="font-bold text-sm">Weather Info</span>
+        {/* Top Search Bar */}
+        {!isNavigating && (
+          <div className="absolute top-0 left-0 right-0 z-10 p-4 pt-12">
+            <div className="max-w-md mx-auto">
+              <div className="flex items-center gap-2 bg-card/90 backdrop-blur-lg rounded-full px-4 py-3 shadow-lg border border-border">
+                <Search className="w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search species..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-sm flex-1 outline-none placeholder:text-muted-foreground"
+                />
+                {searchQuery && (
                   <button
-                    onClick={() => setShowWeatherDetails(false)}
-                    className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 hover:bg-muted rounded-full transition-colors"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-4 h-4 text-muted-foreground" />
                   </button>
-                </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="bg-muted/40 p-2 rounded-xl">
-                    <span className="text-muted-foreground block text-[10px]">Conditions</span>
-                    <span className="font-semibold flex items-center gap-1 mt-0.5">
-                      <span>{weatherAnalysis.icon}</span>
-                      {weatherAnalysis.desc}
-                    </span>
-                  </div>
-                  <div className="bg-muted/40 p-2 rounded-xl">
-                    <span className="text-muted-foreground block text-[10px]">Temperature</span>
-                    <span className="font-semibold block mt-0.5">{weatherAnalysis.temp}°C</span>
-                  </div>
-                  <div className="bg-muted/40 p-2 rounded-xl">
-                    <span className="text-muted-foreground block text-[10px]">Wind Speed</span>
-                    <span className="font-semibold block mt-0.5">{weatherAnalysis.wind} km/h</span>
-                  </div>
-                  <div className="bg-muted/40 p-2 rounded-xl">
-                    <span className="text-muted-foreground block text-[10px]">Humidity</span>
-                    <span className="font-semibold block mt-0.5">{weatherAnalysis.humidity}%</span>
-                  </div>
-                </div>
+        {/* Locate button */}
+        <button
+          onClick={handleLocate}
+          className="absolute bottom-[calc(var(--nav-height)+16px)] right-4 z-10 w-12 h-12 rounded-full bg-primary shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
+        >
+          <Locate className="w-5 h-5 text-primary-foreground" />
+        </button>
 
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-muted-foreground">Birdwatching rating</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
-                      {weatherAnalysis.rating}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${weatherAnalysis.barColor} transition-all duration-500`}
-                      style={{ width: `${weatherAnalysis.score}%` }}
-                    />
-                  </div>
-                </div>
+        {/* Floating Weather Suitability Widget */}
+        {weatherAnalysis && !isNavigating && (
+          <div className="absolute top-24 right-4 z-10 flex flex-col items-end gap-2">
+            {/* Weather Toggle Button */}
+            <button
+              onClick={() => setShowWeatherDetails(!showWeatherDetails)}
+              className="flex items-center gap-2 px-3 py-2 bg-card/90 backdrop-blur-lg rounded-full shadow-lg border border-border hover:bg-muted transition-colors text-sm font-semibold"
+            >
+              <span className="text-lg">{weatherAnalysis.icon}</span>
+              <span>{weatherAnalysis.temp}°C</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
+                {weatherAnalysis.rating}
+              </span>
+            </button>
 
-                <div className="bg-primary/5 border border-primary/10 rounded-xl p-3 text-xs leading-relaxed text-foreground">
-                  <p className="font-bold text-primary flex items-center gap-1 mb-1">
-                    <span>💡 Recommendation</span>
-                  </p>
-                  <p>{weatherAnalysis.tip}</p>
-                  {weatherAnalysis.reasons.length > 0 && (
-                    <ul className="mt-1.5 space-y-0.5 text-muted-foreground pl-3.5 list-disc text-[10px]">
-                      {weatherAnalysis.reasons.map((r, i) => (
-                        <li key={i}>{r}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </motion.div>
+            {/* Expanded Weather details */}
+            <AnimatePresence>
+              {showWeatherDetails && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="w-72 bg-card/95 backdrop-blur-md rounded-2xl shadow-xl border border-border p-4 text-left space-y-3"
+                >
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <span className="font-bold text-sm">Weather Info</span>
+                    <button
+                      onClick={() => setShowWeatherDetails(false)}
+                      className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-muted/40 p-2 rounded-xl">
+                      <span className="text-muted-foreground block text-[10px]">Conditions</span>
+                      <span className="font-semibold flex items-center gap-1 mt-0.5">
+                        <span>{weatherAnalysis.icon}</span>
+                        {weatherAnalysis.desc}
+                      </span>
+                    </div>
+                    <div className="bg-muted/40 p-2 rounded-xl">
+                      <span className="text-muted-foreground block text-[10px]">Temperature</span>
+                      <span className="font-semibold block mt-0.5">{weatherAnalysis.temp}°C</span>
+                    </div>
+                    <div className="bg-muted/40 p-2 rounded-xl">
+                      <span className="text-muted-foreground block text-[10px]">Wind Speed</span>
+                      <span className="font-semibold block mt-0.5">{weatherAnalysis.wind} km/h</span>
+                    </div>
+                    <div className="bg-muted/40 p-2 rounded-xl">
+                      <span className="text-muted-foreground block text-[10px]">Humidity</span>
+                      <span className="font-semibold block mt-0.5">{weatherAnalysis.humidity}%</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Birdwatching rating</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
+                        {weatherAnalysis.rating}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${weatherAnalysis.barColor} transition-all duration-500`}
+                        style={{ width: `${weatherAnalysis.score}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/5 border border-primary/10 rounded-xl p-3 text-xs leading-relaxed text-foreground">
+                    <p className="font-bold text-primary flex items-center gap-1 mb-1">
+                      <span>💡 Recommendation</span>
+                    </p>
+                    <p>{weatherAnalysis.tip}</p>
+                    {weatherAnalysis.reasons.length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5 text-muted-foreground pl-3.5 list-disc text-[10px]">
+                        {weatherAnalysis.reasons.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* Selected Sighting Detail & Navigation Card */}
+        {selectedSighting && !isNavigating && (
+          <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 md:left-auto md:w-96 z-20 bg-card/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-border p-4 animate-in slide-in-from-bottom duration-200">
+            <div className="flex justify-between items-start gap-3">
+            {selectedSighting.isCommunity && selectedSighting.imageUrl ? (
+              selectedSighting.imageUrl.toLowerCase().includes('.mp4') || selectedSighting.imageUrl.toLowerCase().includes('.mov') || selectedSighting.imageUrl.toLowerCase().includes('.webm') ? (
+                <video
+                  src={selectedSighting.imageUrl}
+                  className="h-16 w-16 rounded-xl object-cover shrink-0"
+                  preload="metadata"
+                  muted
+                />
+              ) : (
+                <img
+                  src={selectedSighting.imageUrl}
+                  alt={selectedSighting.comName}
+                  className="h-16 w-16 rounded-xl object-cover shrink-0"
+                />
+              )
+            ) : (
+              <BirdImage
+                scientificName={selectedSighting.sciName}
+                commonName={selectedSighting.comName}
+                className="h-16 w-16 rounded-xl"
+              />
             )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {/* Selected Sighting Detail & Navigation Card */}
-      {selectedSighting && !isNavigating && (
-        <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 md:left-auto md:w-96 z-20 bg-card/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-border p-4 animate-in slide-in-from-bottom duration-200">
-          <div className="flex justify-between items-start gap-3">
-            <BirdImage
-              scientificName={selectedSighting.sciName}
-              commonName={selectedSighting.comName}
-              className="h-16 w-16 rounded-xl"
-            />
             <div className="flex-1 min-w-0">
               <span className="inline-block bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">
                 Selected Destination
               </span>
               <h3 className="font-semibold text-base text-foreground truncate">{selectedSighting.comName}</h3>
-              <p className="text-xs text-muted-foreground italic truncate mt-0.5 flex items-center gap-1.5">
-                {selectedSighting.sciName}
-                <a
-                  href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
-                    selectedSighting.sciName
-                      .split(" ")
-                      .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
-                      .join("_")
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-0.5 text-primary hover:underline font-semibold ml-1 shrink-0"
-                >
-                  (Know More <ExternalLink className="w-3 h-3" />)
-                </a>
-              </p>
-              
-              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
-                <MapPin className="w-3.5 h-3.5" />
-                <span className="truncate">{selectedSighting.locName}</span>
+              {selectedSighting.isCommunity && selectedSighting.authorName ? (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  by @{selectedSighting.authorName}
+                </p>
+              ) : selectedSighting.sciName ? (
+                <p className="text-xs text-muted-foreground italic truncate mt-0.5 flex items-center gap-1.5">
+                  {selectedSighting.sciName}
+                  <a
+                    href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
+                      selectedSighting.sciName
+                        .split(" ")
+                        .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+                        .join("_")
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 text-primary hover:underline font-semibold ml-1 shrink-0"
+                  >
+                    (Know More <ExternalLink className="w-3 h-3" />)
+                  </a>
+                </p>
+              ) : null}
+
+                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span className="truncate">{selectedSighting.locName}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedSighting(null)}
+                className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {routePopupRef.current ? "Route calculated" : "Calculating route..."}
+              </div>
+              <Button
+                onClick={() => {
+                  setIsNavigating(true);
+                  setHasArrived(false);
+                  // Center and pitch map
+                  if (map.current && userLocation) {
+                    map.current.easeTo({
+                      center: [userLocation.lng, userLocation.lat],
+                      zoom: 17,
+                      pitch: 50,
+                      bearing: 0,
+                      duration: 1500
+                    });
+                  }
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 flex items-center gap-1.5 shadow-md hover:scale-105 transition-transform"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" className="rotate-45"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                Start Navigation
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Active Navigation Guidance UI */}
+        {isNavigating && selectedSighting && (
+          <>
+            {/* Top Green Banner */}
+            <div className="absolute top-12 left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-top duration-300">
+              <div className="bg-green-600 dark:bg-green-700 text-white rounded-2xl p-4 shadow-xl border border-green-500/20 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-xl shrink-0 font-bold">
+                  {navigationSteps[currentStepIndex]?.instruction.toLowerCase().includes("left") ? "⬅️" :
+                    navigationSteps[currentStepIndex]?.instruction.toLowerCase().includes("right") ? "➡️" : "⬆️"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-base leading-tight">
+                    {navigationSteps[currentStepIndex]?.instruction || "Continue to target destination"}
+                  </p>
+                  {navigationSteps[currentStepIndex] && (
+                    <p className="text-xs text-white/80 mt-0.5">
+                      In {Math.round(navigationSteps[currentStepIndex].distance)} meters
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-            <button
-              onClick={() => setSelectedSighting(null)}
-              className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
 
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              {routePopupRef.current ? "Route calculated" : "Calculating route..."}
+            {/* Bottom Panel */}
+            <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-bottom duration-300">
+              <div className="bg-card/95 backdrop-blur-lg border border-border rounded-3xl p-4 shadow-2xl space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-bold text-blue-600">
+                        {remainingDuration !== null
+                          ? (remainingDuration > 60 ? `${Math.floor(remainingDuration / 60)} hr ${remainingDuration % 60} min` : `${remainingDuration} min`)
+                          : routePopupRef.current ? "Calculating..." : "Calculated"}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        ({remainingDistance !== null ? remainingDistance.toFixed(1) : "..."} km)
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Target: {selectedSighting.comName}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        if (currentStepIndex < navigationSteps.length - 1) {
+                          setCurrentStepIndex(prev => prev + 1);
+                        } else {
+                          setHasArrived(true);
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full text-xs"
+                    >
+                      Next Step
+                    </Button>
+                    <Button
+                      onClick={() => setHasArrived(true)}
+                      className="bg-green-600 hover:bg-green-700 text-white rounded-full text-xs shadow-md"
+                    >
+                      Arrived
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => {
+                      setIsNavigating(false);
+                      setHasArrived(false);
+                      setCurrentStepIndex(0);
+                      // Reset map pitch
+                      if (map.current) {
+                        map.current.easeTo({
+                          pitch: 0,
+                          zoom: 12,
+                          duration: 1000
+                        });
+                      }
+                    }}
+                    variant="destructive"
+                    className="w-full rounded-full font-bold shadow-md"
+                  >
+                    End Navigation
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Arrival Celebratory Dialog */}
+        <Dialog open={hasArrived} onOpenChange={(open) => !open && setHasArrived(false)}>
+          <DialogContent className="max-w-md bg-background border-border text-center p-6 space-y-4">
+            <div className="mx-auto h-16 w-16 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center text-4xl animate-bounce">
+              🎉
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-foreground">You have arrived!</h2>
+              <p className="text-sm text-muted-foreground">
+                You are at <span className="font-semibold text-foreground">{selectedSighting?.locName}</span>.
+              </p>
+              <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-xl p-3 mt-2 leading-relaxed">
+                🐦 Keep your binoculars ready! Look out for the <span className="font-bold">{selectedSighting?.comName}</span>{selectedSighting?.sciName ? ` (${selectedSighting.sciName})` : ''} nearby.
+              </p>
             </div>
             <Button
               onClick={() => {
-                setIsNavigating(true);
+                setIsNavigating(false);
                 setHasArrived(false);
-                // Center and pitch map
-                if (map.current && userLocation) {
+                setSelectedSighting(null);
+                setCurrentStepIndex(0);
+                // Reset map pitch
+                if (map.current) {
                   map.current.easeTo({
-                    center: [userLocation.lng, userLocation.lat],
-                    zoom: 17,
-                    pitch: 50,
-                    bearing: 0,
-                    duration: 1500
+                    pitch: 0,
+                    zoom: 12,
+                    duration: 1000
                   });
                 }
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 flex items-center gap-1.5 shadow-md hover:scale-105 transition-transform"
+              className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-md"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" className="rotate-45"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              Start Guidance
+              Finish Navigation
             </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Active Navigation Guidance UI */}
-      {isNavigating && selectedSighting && (
-        <>
-          {/* Top Green Banner */}
-          <div className="absolute top-12 left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-top duration-300">
-            <div className="bg-green-600 dark:bg-green-700 text-white rounded-2xl p-4 shadow-xl border border-green-500/20 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-xl shrink-0 font-bold">
-                {navigationSteps[currentStepIndex]?.instruction.toLowerCase().includes("left") ? "⬅️" :
-                 navigationSteps[currentStepIndex]?.instruction.toLowerCase().includes("right") ? "➡️" : "⬆️"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-base leading-tight">
-                  {navigationSteps[currentStepIndex]?.instruction || "Continue to target destination"}
-                </p>
-                {navigationSteps[currentStepIndex] && (
-                  <p className="text-xs text-white/80 mt-0.5">
-                    In {Math.round(navigationSteps[currentStepIndex].distance)} meters
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Panel */}
-          <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 max-w-md mx-auto z-30 animate-in slide-in-from-bottom duration-300">
-            <div className="bg-card/95 backdrop-blur-lg border border-border rounded-3xl p-4 shadow-2xl space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-bold text-blue-600">
-                      {remainingDuration !== null 
-                        ? (remainingDuration > 60 ? `${Math.floor(remainingDuration / 60)} hr ${remainingDuration % 60} min` : `${remainingDuration} min`)
-                        : routePopupRef.current ? "Calculating..." : "Calculated"}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      ({remainingDistance !== null ? remainingDistance.toFixed(1) : "..."} km)
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Target: {selectedSighting.comName}
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => {
-                      if (currentStepIndex < navigationSteps.length - 1) {
-                        setCurrentStepIndex(prev => prev + 1);
-                      } else {
-                        setHasArrived(true);
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full text-xs"
-                  >
-                    Next Step
-                  </Button>
-                  <Button
-                    onClick={() => setHasArrived(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white rounded-full text-xs shadow-md"
-                  >
-                    Arrived
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => {
-                    setIsNavigating(false);
-                    setHasArrived(false);
-                    setCurrentStepIndex(0);
-                    // Reset map pitch
-                    if (map.current) {
-                      map.current.easeTo({
-                        pitch: 0,
-                        zoom: 12,
-                        duration: 1000
-                      });
-                    }
-                  }}
-                  variant="destructive"
-                  className="w-full rounded-full font-bold shadow-md"
-                >
-                  End Guidance
-                </Button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Arrival Celebratory Dialog */}
-      <Dialog open={hasArrived} onOpenChange={(open) => !open && setHasArrived(false)}>
-        <DialogContent className="max-w-md bg-background border-border text-center p-6 space-y-4">
-          <div className="mx-auto h-16 w-16 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center text-4xl animate-bounce">
-            🎉
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-foreground">You have arrived!</h2>
-            <p className="text-sm text-muted-foreground">
-              You are at <span className="font-semibold text-foreground">{selectedSighting?.locName}</span>.
-            </p>
-            <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-xl p-3 mt-2 leading-relaxed">
-              🐦 Keep your binoculars ready! Look out for the <span className="font-bold">{selectedSighting?.comName}</span> ({selectedSighting?.sciName}) nearby.
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              setIsNavigating(false);
-              setHasArrived(false);
-              setSelectedSighting(null);
-              setCurrentStepIndex(0);
-              // Reset map pitch
-              if (map.current) {
-                map.current.easeTo({
-                  pitch: 0,
-                  zoom: 12,
-                  duration: 1000
-                });
-              }
-            }}
-            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-md"
-          >
-            Finish Navigation
-          </Button>
-        </DialogContent>
-      </Dialog>
-    </div>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 };

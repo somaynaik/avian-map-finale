@@ -104,20 +104,33 @@ Deno.serve(async () => {
     }
 
     try {
+      // Optimistically claim the job by updating processed_at where it is still null
+      const { data: claimed, error: claimError } = await supabase
+        .from("email_notifications")
+        .update({ processed_at: new Date().toISOString() })
+        .eq("id", job.id)
+        .is("processed_at", null)
+        .select();
+
+      if (claimError || !claimed || claimed.length === 0) {
+        // Already claimed or processed by another concurrent invocation
+        console.log(`Job ${job.id} already claimed or processed, skipping.`);
+        continue;
+      }
+
       await smtpClient.send({
         from: emailFrom,
         to: recipientAuth.data.user.email,
         subject,
         html,
       });
-
-      await supabase
-        .from("email_notifications")
-        .update({ processed_at: new Date().toISOString() })
-        .eq("id", job.id);
     } catch (error: any) {
       console.error(`Failed to send email for job ${job.id}:`, error);
-      // Continue processing other jobs even if one fails
+      // Revert the processed_at update on failure so it can be retried
+      await supabase
+        .from("email_notifications")
+        .update({ processed_at: null })
+        .eq("id", job.id);
     }
   }
 

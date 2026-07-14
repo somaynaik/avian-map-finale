@@ -1,22 +1,26 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Geolocation } from "@capacitor/geolocation";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { 
-  LayoutDashboard, 
-  Search, 
-  SlidersHorizontal, 
-  Printer, 
-  MapPin, 
-  Calendar, 
-  Activity, 
-  Compass, 
+import {
+  LayoutDashboard,
+  Search,
+  SlidersHorizontal,
+  Printer,
+  MapPin,
+  Calendar,
+  Activity,
+  Compass,
   ArrowRight,
   TrendingUp,
   X,
   MapPinOff,
-  Navigation
+  Navigation,
+  Bird,
+  Feather,
+  Leaf,
+  Home
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,24 +31,24 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const R = 6371; // Radius of the earth in km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2); 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
 const BIRD_IMAGE_CACHE: Record<string, string> = {};
 
-export const BirdImage = ({ 
-  scientificName, 
-  commonName, 
-  className = "h-9 w-9 rounded-full" 
-}: { 
-  scientificName?: string; 
-  commonName: string; 
-  className?: string; 
+export const BirdImage = ({
+  scientificName,
+  commonName,
+  className = "h-9 w-9 rounded-full"
+}: {
+  scientificName?: string;
+  commonName: string;
+  className?: string;
 }) => {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,10 +106,10 @@ export const BirdImage = ({
 
   if (imgUrl) {
     return (
-      <img 
-        src={imgUrl} 
-        alt={commonName} 
-        className={`${className} object-cover border border-border shadow-sm shrink-0`} 
+      <img
+        src={imgUrl}
+        alt={commonName}
+        className={`${className} object-cover border border-border shadow-sm shrink-0`}
         onError={() => setImgUrl(null)}
       />
     );
@@ -118,12 +122,106 @@ export const BirdImage = ({
   );
 };
 
+const BirdInfoCard = ({
+  scientificName,
+  commonName,
+  locationName,
+  lat,
+  lng
+}: {
+  scientificName?: string;
+  commonName: string;
+  locationName: string;
+  lat: number;
+  lng: number;
+}) => {
+  const [info, setInfo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!scientificName) {
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchInfo = async () => {
+      try {
+        const formattedName = scientificName
+          .split(" ")
+          .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+          .join("_");
+
+        const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(formattedName)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted && data.extract) {
+            setInfo(data.extract);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching bird summary from Wikipedia:", error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchInfo();
+    return () => {
+      isMounted = false;
+    };
+  }, [scientificName]);
+
+  return (
+    <div className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm text-foreground max-w-2xl mt-1 mb-2">
+      <div className="flex items-center gap-2 border-b border-border/40 pb-2 mb-3.5">
+        <span className="text-xs font-bold text-primary uppercase tracking-wider">Avian Information Card</span>
+      </div>
+      
+      <div className="flex flex-col sm:flex-row gap-4">
+        {/* Expanded Bird Image */}
+        <div className="shrink-0">
+          <BirdImage 
+            scientificName={scientificName} 
+            commonName={commonName} 
+            className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl object-cover shadow-inner" 
+          />
+        </div>
+
+        {/* Text Details & Coordinates */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {loading ? (
+            <div className="space-y-2 py-1">
+              <div className="h-3.5 bg-muted/60 animate-pulse rounded-lg w-full" />
+              <div className="h-3.5 bg-muted/60 animate-pulse rounded-lg w-5/6" />
+            </div>
+          ) : info ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">{info}</p>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted-foreground italic">No detailed summary available for this species.</p>
+          )}
+
+          <div className="pt-2.5 border-t border-border/40 space-y-1 text-xs text-muted-foreground">
+            <div>
+              <span className="font-semibold text-foreground">Location details:</span> {locationName}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Coordinates:</span> {lat.toFixed(6)}, {lng.toFixed(6)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const DashboardPage = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRarity, setFilterRarity] = useState<"all" | "rare" | "common">("all");
   const [hoveredBirdName, setHoveredBirdName] = useState<string | null>(null);
   const [clickedBirdName, setClickedBirdName] = useState<string | null>(null);
+  const [expandedBirdKey, setExpandedBirdKey] = useState<string | null>(null);
 
   // Close clicked bird name tooltip on click outside
   useEffect(() => {
@@ -209,12 +307,12 @@ export const DashboardPage = () => {
   // Filtered sightings
   const filteredSightings = useMemo(() => {
     return sightings.filter(s => {
-      const matchesSearch = 
+      const matchesSearch =
         s.comName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (s.sciName && s.sciName.toLowerCase().includes(searchQuery.toLowerCase()));
-      
+
       const isRare = s.sciName && (s.sciName.includes("migrans") || s.sciName.includes("pitta") || s.sciName.includes("cuckoo"));
-      const matchesRarity = 
+      const matchesRarity =
         filterRarity === "all" ||
         (filterRarity === "rare" && isRare) ||
         (filterRarity === "common" && !isRare);
@@ -227,7 +325,7 @@ export const DashboardPage = () => {
   const stats = useMemo(() => {
     const totalBirds = filteredSightings.reduce((sum, s) => sum + (s.howMany || 1), 0);
     const uniqueSpecies = new Set(filteredSightings.map(s => s.speciesCode)).size;
-    
+
     const avgDistance = filteredSightings.length > 0
       ? Math.round(filteredSightings.reduce((sum, s) => sum + s.distanceKm, 0) / filteredSightings.length)
       : 0;
@@ -261,13 +359,13 @@ export const DashboardPage = () => {
   const chartData = useMemo(() => {
     const data = [];
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dayLabel = days[date.getDay()];
       const formattedDate = date.toISOString().split("T")[0];
-      
+
       // Count sightings on this date
       const count = filteredSightings
         .filter(s => s.obsDt.startsWith(formattedDate))
@@ -290,7 +388,7 @@ export const DashboardPage = () => {
     const graphHeight = height - padding * 2;
 
     const maxCount = Math.max(...chartData.map(d => d.count), 5);
-    
+
     const points = chartData.map((d, i) => {
       const x = padding + (i * (graphWidth / (chartData.length - 1)));
       const y = padding + graphHeight - (d.count / maxCount * graphHeight);
@@ -300,7 +398,7 @@ export const DashboardPage = () => {
     if (points.length === 0) return { line: "", fill: "", points: [] };
 
     const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-    
+
     // Create fill path closing at the bottom corners
     const fillPath = `
       ${linePath} 
@@ -322,7 +420,7 @@ export const DashboardPage = () => {
       // Angular spread for radiating effect (around center)
       const angles = [190, 230, 270, 310, 350, 15]; // half-circle fan
       const angle = (angles[i % angles.length] * Math.PI) / 180;
-      
+
       // Compute radial projection center offsets (radius 90px to 140px based on index)
       const radius = 100 + (i * 12);
       const x = Math.round(Math.cos(angle) * radius);
@@ -384,13 +482,13 @@ export const DashboardPage = () => {
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Total Arrivals Card */}
-              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-2xl">
-                  🐦
+              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] hover:shadow-md transition-all duration-300">
+                <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center shadow-inner">
+                  <Bird className="h-5 w-5" strokeWidth={2.2} />
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block font-medium uppercase tracking-wider">Total Arrived</span>
-                  <span className="text-2xl font-bold block mt-0.5">{stats.totalBirds}</span>
+                  <span className="text-2xl font-bold block mt-0.5 text-foreground">{stats.totalBirds}</span>
                   <span className="text-[10px] text-primary font-semibold flex items-center gap-0.5 mt-0.5">
                     <TrendingUp className="h-3 w-3" /> +14% vs last week
                   </span>
@@ -398,13 +496,13 @@ export const DashboardPage = () => {
               </div>
 
               {/* Species Count Card */}
-              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-2xl">
-                  🌿
+              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] hover:shadow-md transition-all duration-300">
+                <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center shadow-inner">
+                  <Leaf className="h-5 w-5" strokeWidth={2.2} />
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block font-medium uppercase tracking-wider">Species</span>
-                  <span className="text-2xl font-bold block mt-0.5">{stats.uniqueSpecies}</span>
+                  <span className="text-2xl font-bold block mt-0.5 text-foreground">{stats.uniqueSpecies}</span>
                   <span className="text-[10px] text-primary font-semibold flex items-center gap-0.5 mt-0.5">
                     <TrendingUp className="h-3 w-3" /> +20% vs last week
                   </span>
@@ -412,25 +510,25 @@ export const DashboardPage = () => {
               </div>
 
               {/* Average Distance Card */}
-              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center text-2xl">
-                  📍
+              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] hover:shadow-md transition-all duration-300">
+                <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center shadow-inner">
+                  <Compass className="h-5 w-5" strokeWidth={2.2} />
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block font-medium uppercase tracking-wider">Avg Distance</span>
-                  <span className="text-2xl font-bold block mt-0.5">{stats.avgDistance} km</span>
+                  <span className="text-2xl font-bold block mt-0.5 text-foreground">{stats.avgDistance} km</span>
                   <span className="text-[10px] text-muted-foreground block mt-0.5">from your location</span>
                 </div>
               </div>
 
               {/* Most Arrivals Card */}
-              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className="h-12 w-12 rounded-xl bg-accent/15 text-accent-foreground flex items-center justify-center text-2xl">
-                  📅
+              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:scale-[1.02] hover:shadow-md transition-all duration-300">
+                <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center shadow-inner">
+                  <Calendar className="h-5 w-5" strokeWidth={2.2} />
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block font-medium uppercase tracking-wider">Peak Arrival</span>
-                  <span className="text-2xl font-bold block mt-0.5 truncate max-w-[140px]">{stats.peakDay}</span>
+                  <span className="text-2xl font-bold block mt-0.5 truncate max-w-[140px] text-foreground">{stats.peakDay}</span>
                   <span className="text-[10px] text-muted-foreground block mt-0.5">
                     {stats.peakCount > 0 ? `${stats.peakCount} birds registered` : "No arrivals"}
                   </span>
@@ -440,7 +538,7 @@ export const DashboardPage = () => {
 
             {/* Middle Section (Table + Visual charts) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              
+
               {/* Left Column: List table */}
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm lg:col-span-7 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -450,7 +548,7 @@ export const DashboardPage = () => {
                       {stats.uniqueSpecies} Species
                     </span>
                   </div>
-                  
+
                   {/* Search and Filters */}
                   <div className="flex items-center gap-2 print:hidden">
                     <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-xl border border-border max-w-[180px]">
@@ -463,7 +561,7 @@ export const DashboardPage = () => {
                         className="bg-transparent text-xs w-full outline-none placeholder:text-muted-foreground"
                       />
                     </div>
-                    
+
                     <select
                       value={filterRarity}
                       onChange={(e) => setFilterRarity(e.target.value as any)}
@@ -493,21 +591,50 @@ export const DashboardPage = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredSightings.slice(0, 10).map((s) => (
-                          <tr key={s.obsDt + s.speciesCode} className="hover:bg-muted/40 transition-colors group">
-                            <td className="py-3.5 flex items-center gap-3">
-                              <BirdImage scientificName={s.sciName} commonName={s.comName} className="h-9 w-9 rounded-full" />
-                              <span className="font-semibold text-foreground">{s.comName}</span>
-                            </td>
-                            <td className="py-3.5 text-muted-foreground italic text-xs">{s.sciName || "N/A"}</td>
-                            <td className="py-3.5 text-xs font-medium">
-                              {new Date(s.obsDt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            </td>
-                            <td className="py-3.5 text-right font-semibold text-xs text-primary group-hover:translate-x-[-2px] transition-transform">
-                              📍 {Math.round(s.distanceKm)} km
-                            </td>
-                          </tr>
-                        ))}
+                        {filteredSightings.slice(0, 10).map((s) => {
+                          const birdKey = s.obsDt + s.speciesCode;
+                          const isExpanded = expandedBirdKey === birdKey;
+                          return (
+                            <Fragment key={birdKey}>
+                              <tr className="hover:bg-muted/40 transition-colors group">
+                                <td className="py-3.5 flex items-center gap-3">
+                                  <BirdImage scientificName={s.sciName} commonName={s.comName} className="h-9 w-9 rounded-full" />
+                                  <span
+                                    onClick={() => setExpandedBirdKey(isExpanded ? null : birdKey)}
+                                    className="font-semibold text-foreground hover:text-primary cursor-pointer hover:underline transition-colors"
+                                  >
+                                    {s.comName}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 text-muted-foreground italic text-xs">{s.sciName || "N/A"}</td>
+                                <td className="py-3.5 text-xs font-medium">
+                                  {new Date(s.obsDt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </td>
+                                <td className="py-3.5 text-right font-semibold text-xs text-primary group-hover:translate-x-[-2px] transition-transform">
+                                  <span className="inline-flex items-center gap-1">
+                                    <MapPin className="h-3 w-3 text-primary shrink-0" />
+                                    {Math.round(s.distanceKm)} km
+                                  </span>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-muted/5 dark:bg-muted/10">
+                                  <td colSpan={4} className="p-4 border-b border-border">
+                                    <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                                      <BirdInfoCard
+                                        scientificName={s.sciName}
+                                        commonName={s.comName}
+                                        locationName={s.locName}
+                                        lat={s.lat}
+                                        lng={s.lng}
+                                      />
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}
@@ -516,7 +643,7 @@ export const DashboardPage = () => {
 
               {/* Right Column: Visual Maps & Line charts */}
               <div className="lg:col-span-5 space-y-6">
-                
+
                 {/* Distance Map diagram */}
                 <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
                   <div className="flex justify-between items-center">
@@ -551,7 +678,7 @@ export const DashboardPage = () => {
                     {/* Central Home Node */}
                     <div className="absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-20">
                       <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg border-2 border-white animate-pulse">
-                        🏠
+                        <Home className="h-4.5 w-4.5" />
                       </div>
                     </div>
 
@@ -571,7 +698,7 @@ export const DashboardPage = () => {
                             transform: "translate(-50%, -50%)"
                           }}
                         >
-                          <div 
+                          <div
                             className="flex flex-col items-center group cursor-pointer relative"
                             onMouseEnter={() => setHoveredBirdName(item.comName)}
                             onMouseLeave={() => setHoveredBirdName(null)}
@@ -603,10 +730,10 @@ export const DashboardPage = () => {
                                 </div>
                               )
                             )}
-                            <BirdImage 
-                              scientificName={item.sciName} 
-                              commonName={item.comName} 
-                              className="h-8 w-8 rounded-full border-2 border-primary shadow-md hover:scale-110 transition-transform" 
+                            <BirdImage
+                              scientificName={item.sciName}
+                              commonName={item.comName}
+                              className="h-8 w-8 rounded-full border-2 border-primary shadow-md hover:scale-110 transition-transform"
                             />
                             <span className="bg-card/90 border border-border text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm text-foreground mt-1 whitespace-nowrap">
                               {item.distanceStr}
