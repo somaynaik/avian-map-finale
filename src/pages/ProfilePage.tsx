@@ -1,13 +1,15 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import { Camera, Loader2, LogOut, Save, Settings, X, ChevronDown, LayoutGrid, Play, Contact, MapPin } from "lucide-react";
+import { Camera, Loader2, LogOut, Save, Settings, X, ChevronDown, LayoutGrid, Play, Contact, MapPin, Moon, Sun } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -37,6 +39,7 @@ import { FeedCard, VideoCard } from "./FeedPage";
 const ProfilePage = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
@@ -604,6 +607,28 @@ const ProfilePage = () => {
                   value={bio}
                   onChange={(event) => setBio(event.target.value)}
                   placeholder="Tell other birdwatchers a bit about yourself"
+                />
+              </div>
+
+              {/* Dark Mode Toggle */}
+              <div className="flex items-center justify-between rounded-xl border border-border p-3 bg-muted/20">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {theme === "dark" ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium leading-none">Dark Mode</p>
+                    <p className="text-xs text-muted-foreground mt-1">Toggle dark theme</p>
+                  </div>
+                </div>
+                <Switch
+                  id="dark-mode"
+                  checked={theme === "dark"}
+                  onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
                 />
               </div>
 
