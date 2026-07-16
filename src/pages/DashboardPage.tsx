@@ -457,7 +457,11 @@ export const DashboardPage = () => {
   }, [filteredSightings]);
 
   const handlePrint = () => {
-    window.print();
+    if ((window as any).AndroidPrintBridge && (window as any).AndroidPrintBridge.printPage) {
+      (window as any).AndroidPrintBridge.printPage();
+    } else {
+      window.print();
+    }
   };
 
   return (
