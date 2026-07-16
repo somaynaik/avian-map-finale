@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Geolocation } from "@capacitor/geolocation";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { useTheme } from "next-themes";
 import {
   LayoutDashboard,
   Search,
@@ -216,6 +217,7 @@ const BirdInfoCard = ({
 };
 
 export const DashboardPage = () => {
+  const { theme } = useTheme();
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRarity, setFilterRarity] = useState<"all" | "rare" | "common">("all");
@@ -234,6 +236,7 @@ export const DashboardPage = () => {
 
   const miniMapContainer = useRef<HTMLDivElement>(null);
   const miniMap = useRef<maplibregl.Map | null>(null);
+  const currentStyleRef = useRef<string>("");
 
   // Get user location on mount
   useEffect(() => {
@@ -257,9 +260,14 @@ export const DashboardPage = () => {
   useEffect(() => {
     if (!miniMapContainer.current || miniMap.current || !userLocation) return;
 
+    const initialStyle = (theme === "dark" || document.documentElement.classList.contains("dark"))
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    currentStyleRef.current = initialStyle;
     miniMap.current = new maplibregl.Map({
       container: miniMapContainer.current,
-      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      style: initialStyle,
       center: [userLocation.lng, userLocation.lat],
       zoom: 9.2,
       interactive: false,
@@ -271,6 +279,19 @@ export const DashboardPage = () => {
       miniMap.current = null;
     };
   }, [userLocation]);
+
+  // Dynamic Mini Map Theme Switching
+  useEffect(() => {
+    if (!miniMap.current) return;
+    const targetStyle = theme === "dark"
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    if (currentStyleRef.current === targetStyle) return;
+    currentStyleRef.current = targetStyle;
+
+    miniMap.current.setStyle(targetStyle);
+  }, [theme]);
 
   // Fetch local bird observations using userLocation (within 50km, last 7 days)
   const { data: rawSightings = [], isLoading } = useQuery<RecentObservation[]>({

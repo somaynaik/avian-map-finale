@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -440,8 +441,10 @@ const FeedPage = () => {
   );
 };
 const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesName: string }) => {
+  const { theme } = useTheme();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const currentStyleRef = useRef<string>("");
   const [showOverlay, setShowOverlay] = useState(false);
   const [birdInfo, setBirdInfo] = useState<{
     title: string;
@@ -487,9 +490,14 @@ const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesN
     if (!mapContainerRef.current || mapRef.current) return;
 
     try {
+      const initialStyle = (theme === "dark" || document.documentElement.classList.contains("dark"))
+        ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+        : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+      currentStyleRef.current = initialStyle;
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+        style: initialStyle,
         center: [lng, lat],
         zoom: 13,
         attributionControl: false,
@@ -527,6 +535,18 @@ const PostMap = ({ lat, lng, speciesName }: { lat: number; lng: number; speciesN
       }
     };
   }, [lat, lng]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const targetStyle = theme === "dark"
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    if (currentStyleRef.current === targetStyle) return;
+    currentStyleRef.current = targetStyle;
+
+    mapRef.current.setStyle(targetStyle);
+  }, [theme]);
 
   return (
     <div className="relative h-full w-full">

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Geolocation } from "@capacitor/geolocation";
 import { Capacitor } from "@capacitor/core";
 import { TextToSpeech } from "@capacitor-community/text-to-speech";
+import { useTheme } from "next-themes";
 import { getRecentObservations, getNearbyObservations, type RecentObservation } from "@/lib/ebird";
 import { getRecentGeoTaggedPosts, type GeoTaggedPost } from "@/lib/social";
 import { useQuery } from "@tanstack/react-query";
@@ -134,8 +135,11 @@ const matchSearch = (query: string, name: string, sciName?: string) => {
 };
 
 const MapPage = () => {
+  const { theme } = useTheme();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const activeRouteCoordsRef = useRef<any[] | null>(null);
+  const currentStyleRef = useRef<string>("");
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const communityMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -485,9 +489,14 @@ const MapPage = () => {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
+    const initialStyle = (theme === "dark" || document.documentElement.classList.contains("dark"))
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    currentStyleRef.current = initialStyle;
     map.current = new maplibregl.Map({
       container: mapContainer.current,
-      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      style: initialStyle,
       center: [78.9629, 20.5937], // Center of India
       zoom: 4.5,
     });
@@ -499,6 +508,50 @@ const MapPage = () => {
       map.current = null;
     };
   }, []);
+
+  // Dynamic Map Theme Switching
+  useEffect(() => {
+    if (!map.current) return;
+    const targetStyle = theme === "dark"
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    if (currentStyleRef.current === targetStyle) return;
+    currentStyleRef.current = targetStyle;
+
+    const handleStyleLoad = () => {
+      const coords = activeRouteCoordsRef.current;
+      if (coords && map.current) {
+        if (!map.current.getSource('route')) {
+          map.current.addSource('route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: coords }
+            }
+          });
+          map.current.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': '#3b82f6',
+              'line-width': 5,
+              'line-opacity': 0.8
+            }
+          });
+        }
+      }
+    };
+
+    map.current.once('style.load', handleStyleLoad);
+    map.current.setStyle(targetStyle);
+  }, [theme]);
 
   // Sync user location marker
   useEffect(() => {
@@ -527,6 +580,7 @@ const MapPage = () => {
     if (!map.current) return;
 
     const clearRoute = () => {
+      activeRouteCoordsRef.current = null;
       lastRouteFetchCoords.current = null;
       lastSelectedSightingId.current = null;
       if (map.current?.getSource('route')) {
@@ -578,6 +632,7 @@ const MapPage = () => {
           lastRouteFetchCoords.current = { lat: startLat, lng: startLng };
           const route = data.routes[0];
           const coords = route.geometry.coordinates;
+          activeRouteCoordsRef.current = coords;
 
           if (map.current!.getSource('route')) {
             (map.current!.getSource('route') as maplibregl.GeoJSONSource).setData({

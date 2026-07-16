@@ -6,6 +6,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Geolocation } from "@capacitor/geolocation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,6 +98,7 @@ const verifyBirdImage = async (imgElement: HTMLImageElement): Promise<boolean> =
 
 const CameraPage = () => {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -136,6 +138,7 @@ const CameraPage = () => {
   const miniMapContainerRef = useRef<HTMLDivElement>(null);
   const miniMapRef = useRef<maplibregl.Map | null>(null);
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const currentStyleRef = useRef<string>("");
 
   useEffect(() => {
     if (!imageFile) {
@@ -177,9 +180,14 @@ const CameraPage = () => {
       ? [pinLocation.lng, pinLocation.lat]
       : [78.9629, 20.5937]; // Default: center of India
 
+    const initialStyle = (theme === "dark" || document.documentElement.classList.contains("dark"))
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    currentStyleRef.current = initialStyle;
     const mapInstance = new maplibregl.Map({
       container: miniMapContainerRef.current,
-      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      style: initialStyle,
       center,
       zoom: pinLocation ? 14 : 4.5,
     });
@@ -236,6 +244,19 @@ const CameraPage = () => {
       pinMarkerRef.current = null;
     };
   }, [showMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dynamic Mini Map Theme Switching
+  useEffect(() => {
+    if (!miniMapRef.current) return;
+    const targetStyle = theme === "dark"
+      ? "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+      : "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+    if (currentStyleRef.current === targetStyle) return;
+    currentStyleRef.current = targetStyle;
+
+    miniMapRef.current.setStyle(targetStyle);
+  }, [theme]);
 
   // Auto-locate user when map is opened
   const locateAndCenter = useCallback(async () => {
