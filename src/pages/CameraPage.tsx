@@ -373,7 +373,7 @@ const CameraPage = () => {
       }
 
       // If only audio is provided, use a default image since image_url is required by the DB
-      let imageUrl = "https://i.postimg.cc/3JXmQBSp/avian-map-final-logo.jpg";
+      let imageUrl = "/avian-map-final-logo.jpeg";
       if (imageFile) {
         imageUrl = await uploadPostImage(user!.id, imageFile);
       } else if (videoFile) {

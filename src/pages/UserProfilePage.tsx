@@ -248,11 +248,18 @@ const UserProfilePage = () => {
                     onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
-                    <img
-                      src={post.image_url}
-                      alt={post.species_name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
+                    {post.image_url.includes("avian-map-final-logo") && post.latitude != null && post.longitude != null ? (
+                      <div className="h-full w-full bg-primary/5 flex flex-col items-center justify-center text-primary border border-primary/20">
+                        <MapPin className="h-7 w-7 mb-1 text-primary" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Map Sighting</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={post.image_url}
+                        alt={post.species_name}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    )}
                     {/* Overlay on hover */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-2 text-white">
                       <p className="text-[10px] sm:text-xs font-semibold truncate">{post.species_name}</p>
@@ -267,7 +274,11 @@ const UserProfilePage = () => {
           )}
 
           {activeTab === "videos" && (
-            userVideoPosts.length > 0 && (
+            userVideoPosts.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                This user has not posted any videos yet.
+              </div>
+            ) : (
               <div className="grid grid-cols-3 gap-1 md:gap-2">
                 {userVideoPosts.map((post) => (
                   <div
@@ -316,6 +327,11 @@ const UserProfilePage = () => {
                         playsInline
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
+                    ) : post.image_url.includes("avian-map-final-logo") && post.latitude != null && post.longitude != null ? (
+                      <div className="h-full w-full bg-primary/5 flex flex-col items-center justify-center text-primary border border-primary/20">
+                        <MapPin className="h-7 w-7 mb-1 text-primary" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Map Sighting</span>
+                      </div>
                     ) : (
                       <img
                         src={post.image_url}

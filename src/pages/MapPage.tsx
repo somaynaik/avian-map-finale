@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapPage.css";
-import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users, ExternalLink } from "lucide-react";
+import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users, ExternalLink, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Geolocation } from "@capacitor/geolocation";
 import { getRecentObservations, getNearbyObservations, type RecentObservation } from "@/lib/ebird";
@@ -178,6 +178,44 @@ const MapPage = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [remainingDistance, setRemainingDistance] = useState<number | null>(null);
   const [remainingDuration, setRemainingDuration] = useState<number | null>(null);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+
+  const speakInstruction = (text: string) => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Voice Navigation Guidance Speaker
+  useEffect(() => {
+    if (isNavigating && !isVoiceMuted && navigationSteps[currentStepIndex]) {
+      const step = navigationSteps[currentStepIndex];
+      let spokenText = step.instruction;
+      if (step.distance > 5) {
+        spokenText = `In ${Math.round(step.distance)} meters, ${spokenText}`;
+      }
+      speakInstruction(spokenText);
+    }
+  }, [isNavigating, currentStepIndex, navigationSteps, isVoiceMuted]);
+
+  useEffect(() => {
+    if (hasArrived && !isVoiceMuted) {
+      speakInstruction("You have arrived at your destination. Happy birding!");
+    }
+  }, [hasArrived, isVoiceMuted]);
+
+  // Cancel speech when navigation ends
+  useEffect(() => {
+    if (!isNavigating) {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  }, [isNavigating]);
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -1602,7 +1640,20 @@ const MapPage = () => {
                     </p>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    <Button
+                      onClick={() => setIsVoiceMuted(prev => !prev)}
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground shrink-0"
+                      title={isVoiceMuted ? "Unmute Voice Guidance" : "Mute Voice Guidance"}
+                    >
+                      {isVoiceMuted ? (
+                        <VolumeX className="h-4 w-4 text-destructive" />
+                      ) : (
+                        <Volume2 className="h-4 w-4 text-green-600" />
+                      )}
+                    </Button>
                     <Button
                       onClick={() => {
                         if (currentStepIndex < navigationSteps.length - 1) {

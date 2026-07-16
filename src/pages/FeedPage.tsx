@@ -673,7 +673,7 @@ export const FeedCard = ({
     },
   });
 
-  const isFallbackImage = post.image_url.includes("postimg.cc") || post.image_url.includes("avian-map-final-logo");
+  const isFallbackImage = post.image_url.includes("avian-map-final-logo");
   const showLocationMap = isFallbackImage && post.latitude != null && post.longitude != null;
 
   return (
@@ -684,13 +684,26 @@ export const FeedCard = ({
       className="border-b border-border"
     >
       <div className="flex items-center gap-3 px-4 pb-3 pt-4">
-        <Avatar className="h-11 w-11 border border-border">
+        <Avatar 
+          onClick={() => navigate(`/users/${post.author_id}`)}
+          className="h-11 w-11 border border-border cursor-pointer hover:opacity-85 transition-opacity"
+        >
           <AvatarImage src={post.author?.avatar_url || undefined} alt={authorName} />
           <AvatarFallback>{getInitials(post.author)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{authorName}</p>
-          <p className="truncate text-xs text-muted-foreground">@{post.author?.username || "user"}</p>
+          <p 
+            onClick={() => navigate(`/users/${post.author_id}`)}
+            className="truncate text-sm font-semibold cursor-pointer hover:text-primary transition-colors"
+          >
+            {authorName}
+          </p>
+          <p 
+            onClick={() => navigate(`/users/${post.author_id}`)}
+            className="truncate text-xs text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+          >
+            @{post.author?.username || "user"}
+          </p>
           {post.location_name && (
             <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
               <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -1467,6 +1480,7 @@ export const VideoCard = ({
 
 const CommentsSection = ({ postId }: { postId: string }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState("");
   const isMock = postId.startsWith("video-");
@@ -1542,13 +1556,33 @@ const CommentsSection = ({ postId }: { postId: string }) => {
         <div className="space-y-4">
           {activeComments.map((comment) => (
             <div key={comment.id} className="flex gap-3">
-              <Avatar className="h-8 w-8">
+              <Avatar 
+                onClick={() => {
+                  if (comment.author_id) {
+                    navigate(`/users/${comment.author_id}`);
+                  } else if (comment.author?.id) {
+                    navigate(`/users/${comment.author.id}`);
+                  }
+                }}
+                className="h-8 w-8 cursor-pointer hover:opacity-85 transition-opacity"
+              >
                 <AvatarImage src={comment.author?.avatar_url || undefined} />
                 <AvatarFallback>{getInitials(comment.author)}</AvatarFallback>
               </Avatar>
               <div className="flex-1 rounded-2xl rounded-tl-none bg-muted/50 px-4 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold">{comment.author?.username || "User"}</p>
+                  <p 
+                    onClick={() => {
+                      if (comment.author_id) {
+                        navigate(`/users/${comment.author_id}`);
+                      } else if (comment.author?.id) {
+                        navigate(`/users/${comment.author.id}`);
+                      }
+                    }}
+                    className="text-sm font-semibold cursor-pointer hover:text-primary transition-colors"
+                  >
+                    {comment.author?.username || "User"}
+                  </p>
                   <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.created_at)}</span>
                 </div>
                 <p className="mt-1 text-sm">{comment.body}</p>

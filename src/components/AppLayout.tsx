@@ -8,7 +8,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
-      <main className={isMapPage ? "h-screen w-screen overflow-hidden relative" : "pb-[var(--nav-height)]"}>
+      <main className={isMapPage ? "h-screen w-screen overflow-hidden relative" : "pb-[var(--nav-height)] print:pb-0"}>
         {children}
       </main>
       <BottomNav />

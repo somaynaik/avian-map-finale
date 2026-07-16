@@ -411,7 +411,7 @@ const ProfilePage = () => {
                     onClick={() => setSelectedPost(post as FeedPost)}
                     className="aspect-square relative group overflow-hidden bg-muted cursor-pointer rounded-sm"
                   >
-                    {post.image_url.includes("postimg.cc") && post.latitude != null && post.longitude != null ? (
+                    {post.image_url.includes("avian-map-final-logo") && post.latitude != null && post.longitude != null ? (
                       <div className="h-full w-full bg-primary/5 flex flex-col items-center justify-center text-primary border border-primary/20">
                         <MapPin className="h-7 w-7 mb-1 text-primary" />
                         <span className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Map Sighting</span>
@@ -437,7 +437,11 @@ const ProfilePage = () => {
           )}
 
           {activeTab === "videos" && (
-            userVideoPosts.length > 0 && (
+            userVideoPosts.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border py-8 px-4 text-center text-sm text-muted-foreground bg-card">
+                No videos posted yet. Capture some bird behaviors!
+              </div>
+            ) : (
               <div className="grid grid-cols-3 gap-1 md:gap-2">
                 {userVideoPosts.map((post) => (
                   <div 
@@ -486,7 +490,7 @@ const ProfilePage = () => {
                         playsInline
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
-                    ) : post.image_url.includes("postimg.cc") && post.latitude != null && post.longitude != null ? (
+                    ) : post.image_url.includes("avian-map-final-logo") && post.latitude != null && post.longitude != null ? (
                       <div className="h-full w-full bg-primary/5 flex flex-col items-center justify-center text-primary border border-primary/20">
                         <MapPin className="h-7 w-7 mb-1 text-primary" />
                         <span className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Map Sighting</span>
