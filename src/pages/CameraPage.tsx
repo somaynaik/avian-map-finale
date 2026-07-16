@@ -212,7 +212,16 @@ const CameraPage = () => {
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         border: 3px solid white;
       ">
-        <span style="transform: rotate(45deg); font-size: 16px;">🐦</span>
+        <div style="transform: rotate(45deg); display: flex; align-items: center; justify-content: center; color: white;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 7h.01" />
+            <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20" />
+            <path d="m20 7 2 .5-2 .5" />
+            <path d="M10 18v3" />
+            <path d="M14 18v3" />
+            <path d="M7 21h10" />
+          </svg>
+        </div>
       </div>
       <div style="
         width: 8px; height: 8px;

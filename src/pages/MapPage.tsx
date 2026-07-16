@@ -766,7 +766,31 @@ const MapPage = () => {
         font-weight: bold;
         color: white;
       `;
-      el.textContent = count > 1 ? `${count}` : "🐦";
+      if (count > 1) {
+        el.textContent = `${count}`;
+      } else {
+        el.innerHTML = `
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            style="color: white;"
+          >
+            <path d="M16 7h.01" />
+            <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20" />
+            <path d="m20 7 2 .5-2 .5" />
+            <path d="M10 18v3" />
+            <path d="M14 18v3" />
+            <path d="M7 21h10" />
+          </svg>
+        `;
+      }
 
       el.addEventListener('click', () => {
         setSelectedSighting(firstSighting);
@@ -781,8 +805,15 @@ const MapPage = () => {
         return `
         <div class="bird-popup-row cursor-pointer" data-index="${idx}" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 6px; border-bottom: 1px solid #f3f4f6; text-align: left; cursor: pointer; transition: all 0.2s; border-radius: 6px; ${isSelected ? 'background-color: rgba(31, 93, 59, 0.08); border-left: 3px solid #1F5D3B; padding-left: 4px;' : 'border-left: 3px solid transparent;'}">
           <img class="bird-popup-img-${s.speciesCode}" src="" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: none; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05); flex-shrink: 0;" />
-          <div class="bird-popup-placeholder-${s.speciesCode}" style="width: 36px; height: 36px; border-radius: 50%; background-color: rgba(31, 93, 59, 0.1); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-            🐦
+          <div class="bird-popup-placeholder-${s.speciesCode}" style="width: 36px; height: 36px; border-radius: 50%; background-color: rgba(31, 93, 59, 0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05); color: #1F5D3B;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 7h.01" />
+              <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20" />
+              <path d="m20 7 2 .5-2 .5" />
+              <path d="M10 18v3" />
+              <path d="M14 18v3" />
+              <path d="M7 21h10" />
+            </svg>
           </div>
           <div style="min-width: 0; flex: 1;">
             <strong style="font-size: 13px; color: #111827; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px;">
@@ -957,7 +988,23 @@ const MapPage = () => {
         justify-content: center;
         font-size: 14px;
       `;
-      el.textContent = "📸";
+      el.innerHTML = `
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="color: white;"
+        >
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+          <circle cx="12" cy="13" r="3" />
+        </svg>
+      `;
 
       el.addEventListener('click', () => {
         setSelectedSighting({
