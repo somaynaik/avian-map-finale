@@ -82,7 +82,7 @@ const SignupPage = () => {
             <img 
               src="/avian-map-final-logo.jpeg" 
               alt="Avian Map Logo" 
-              className="w-48 h-auto rounded-3xl object-contain mix-blend-multiply" 
+              className="w-48 h-auto rounded-3xl object-contain mix-blend-multiply dark:mix-blend-normal dark:invert" 
             />
           </div>
           <h1 className="text-4xl md:text-5xl font-extrabold mb-5 tracking-tight text-foreground drop-shadow-sm">
@@ -106,7 +106,7 @@ const SignupPage = () => {
               <img 
                 src="/avian-map-final-logo.jpeg" 
                 alt="Avian Map Logo" 
-                className="w-24 h-auto rounded-2xl object-contain mix-blend-multiply shadow-sm" 
+                className="w-24 h-auto rounded-2xl object-contain mix-blend-multiply shadow-sm dark:mix-blend-normal dark:invert" 
               />
             </div>
             <CardTitle className="text-3xl font-extrabold text-center tracking-tight text-foreground">

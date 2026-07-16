@@ -112,7 +112,7 @@ const FeedPage = () => {
             <img 
               src="/avian-map-final-logo.jpeg" 
               alt="Avian Map Logo" 
-              className="h-10 sm:h-12 w-auto rounded-xl object-contain mix-blend-multiply"
+              className="h-10 sm:h-12 w-auto rounded-xl object-contain mix-blend-multiply dark:mix-blend-normal dark:invert"
             />
             <p className="text-[10px] text-muted-foreground mt-0.5 hidden md:block">
               Unleash The Birdwatcher Within You...
