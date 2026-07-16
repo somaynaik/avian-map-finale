@@ -5,6 +5,8 @@ import "./MapPage.css";
 import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users, ExternalLink, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Geolocation } from "@capacitor/geolocation";
+import { Capacitor } from "@capacitor/core";
+import { TextToSpeech } from "@capacitor-community/text-to-speech";
 import { getRecentObservations, getNearbyObservations, type RecentObservation } from "@/lib/ebird";
 import { getRecentGeoTaggedPosts, type GeoTaggedPost } from "@/lib/social";
 import { useQuery } from "@tanstack/react-query";
@@ -181,12 +183,24 @@ const MapPage = () => {
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
 
   const speakInstruction = (text: string) => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+    if (Capacitor.isNativePlatform()) {
+      TextToSpeech.stop().catch(() => {});
+      TextToSpeech.speak({
+        text: text,
+        lang: 'en-US',
+        rate: 1.0,
+        pitch: 1.0,
+        volume: 1.0,
+        category: 'ambient'
+      }).catch((err) => console.error("Native TTS failed:", err));
+    } else {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
     }
   };
 
@@ -211,8 +225,12 @@ const MapPage = () => {
   // Cancel speech when navigation ends
   useEffect(() => {
     if (!isNavigating) {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
+      if (Capacitor.isNativePlatform()) {
+        TextToSpeech.stop().catch(() => {});
+      } else {
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
       }
     }
   }, [isNavigating]);
