@@ -552,10 +552,22 @@ export async function getRecentGeoTaggedPosts(maxAgeHours = 48) {
     (profiles || []).map((p) => [p.id, p as Pick<Profile, "id" | "username" | "avatar_url">]),
   );
 
-  return posts.map((post) => ({
-    ...(post as Post),
-    author: profileById.get(post.author_id) || null,
-  })) as GeoTaggedPost[];
+  return posts.map((post) => {
+    let noteText = post.note || "";
+    try {
+      const parsed = JSON.parse(post.note || "");
+      if (parsed && typeof parsed === "object" && "body" in parsed) {
+        noteText = parsed.body || "";
+      }
+    } catch {
+      noteText = post.note || "";
+    }
+    return {
+      ...(post as Post),
+      note: noteText,
+      author: profileById.get(post.author_id) || null,
+    };
+  }) as GeoTaggedPost[];
 }
 
 export async function getRecentPostsForUser(userId: string) {

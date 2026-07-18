@@ -1027,6 +1027,18 @@ const MapPage = () => {
       const timeAgo = getTimeAgo(post.created_at);
       const username = post.author?.username || 'Unknown';
 
+      let parsedNote = post.note || '';
+      if (post.note && post.note.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(post.note);
+          if (parsed && typeof parsed === 'object') {
+            parsedNote = parsed.body || '';
+          }
+        } catch (e) {
+          console.error("Error parsing post note", e);
+        }
+      }
+
       const popup = new maplibregl.Popup({
         offset: 25,
         closeButton: true,
@@ -1049,7 +1061,7 @@ const MapPage = () => {
             </h3>
             ${post.location_name ? `<p style="margin: 0 0 4px 0; font-size: 12px;">📍 ${post.location_name}</p>` : ''}
             <p style="margin: 0; font-size: 11px; color: #666;">🕒 ${timeAgo}</p>
-            ${post.note ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #444;">${post.note}</p>` : ''}
+            ${parsedNote ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #444;">${parsedNote}</p>` : ''}
           </div>
         </div>
       `);
