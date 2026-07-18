@@ -1,0 +1,48 @@
+<!-- 
+  SUPABASE AUTH EMAIL TEMPLATE: Confirm Signup
+  
+  Instructions:
+  1. Go to: https://supabase.com/dashboard/project/funbnsfkszqyndjicpoa/auth/templates
+  2. Click on "Confirm signup" tab
+  3. Replace the entire content with this HTML
+  4. Click Save
+  
+  Note: {{ .ConfirmationURL }} is a Supabase variable - leave it as-is
+-->
+
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f4; padding: 32px 16px; margin: 0; min-height: 100%;">
+  <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+
+    <!-- Header with logo -->
+    <div style="background-color: #15803d; padding: 16px 24px; text-align: center;">
+      <img src="https://avian-map.vercel.app/avian-map-final-logo.jpeg" alt="Avian Map Logo" style="height: 56px; width: auto; border-radius: 8px; object-fit: contain; display: inline-block; vertical-align: middle; margin-right: 12px;">
+      <span style="color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.025em; display: inline-block; vertical-align: middle; line-height: 56px;">Avian Map</span>
+    </div>
+
+    <!-- Body -->
+    <div style="padding: 32px 24px; color: #1c1917;">
+      <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #1c1917;">Confirm your email address</h2>
+      <p style="margin-bottom: 20px; font-size: 15px; line-height: 1.6; color: #44403c;">
+        Welcome to Avian Map! 🐦 You're just one step away from joining our community of birdwatchers. Please confirm your email address to activate your account.
+      </p>
+      <div style="text-align: center; margin: 32px 0 16px 0;">
+        <a href="{{ .ConfirmationURL }}" style="background-color: #15803d; color: #ffffff; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 8px; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(21, 128, 61, 0.2);">
+          Confirm Email Address
+        </a>
+      </div>
+      <p style="margin-top: 24px; font-size: 13px; line-height: 1.5; color: #78716c; text-align: center;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="{{ .ConfirmationURL }}" style="color: #15803d; word-break: break-all;">{{ .ConfirmationURL }}</a>
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background-color: #fafaf9; border-top: 1px solid #e7e5e4; padding: 20px 24px; text-align: center;">
+      <p style="margin: 0; font-size: 12px; color: #78716c; line-height: 1.5;">
+        You received this email because someone signed up for an Avian Map account using this address.<br>
+        If this wasn't you, you can safely ignore this email.
+      </p>
+    </div>
+
+  </div>
+</div>
