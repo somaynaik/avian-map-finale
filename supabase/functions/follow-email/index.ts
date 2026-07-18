@@ -83,8 +83,9 @@ Deno.serve(async () => {
       html = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f4; padding: 32px 16px; margin: 0; min-height: 100%;">
           <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <div style="background-color: #15803d; padding: 24px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em;">Avian Map</h1>
+            <div style="background-color: #15803d; padding: 18px 24px; text-align: center;">
+              <img src="https://avian-map.vercel.app/avian-map-final-logo.jpeg" alt="Avian Map Logo" style="height: 48px; width: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #ffffff; display: inline-block; vertical-align: middle; margin-right: 12px;">
+              <span style="color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.025em; display: inline-block; vertical-align: middle; line-height: 48px;">Avian Map</span>
             </div>
             <div style="padding: 32px 24px; color: #1c1917;">
               <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #1c1917;">You have a new follower!</h2>
@@ -114,8 +115,9 @@ Deno.serve(async () => {
       html = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f4; padding: 32px 16px; margin: 0; min-height: 100%;">
           <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <div style="background-color: #15803d; padding: 24px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em;">Avian Map</h1>
+            <div style="background-color: #15803d; padding: 18px 24px; text-align: center;">
+              <img src="https://avian-map.vercel.app/avian-map-final-logo.jpeg" alt="Avian Map Logo" style="height: 48px; width: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #ffffff; display: inline-block; vertical-align: middle; margin-right: 12px;">
+              <span style="color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.025em; display: inline-block; vertical-align: middle; line-height: 48px;">Avian Map</span>
             </div>
             <div style="padding: 32px 24px; color: #1c1917;">
               <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #1c1917;">New message received</h2>
