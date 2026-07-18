@@ -18,6 +18,86 @@ import {
 } from "@/lib/social";
 import { supabase } from "@/lib/supabase";
 
+const renderInlineFormatting = (text: string, mine: boolean) => {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className={`font-bold ${mine ? "text-primary-foreground font-extrabold" : "text-foreground font-extrabold"}`}>
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+};
+
+const MarkdownText = ({ content, mine }: { content: string; mine: boolean }) => {
+  const lines = content.split("\n");
+  const textColor = mine ? "text-primary-foreground" : "text-foreground";
+
+  return (
+    <div className={`space-y-1.5 break-words ${textColor}`}>
+      {lines.map((line, idx) => {
+        let trimmed = line.trim();
+
+        if (trimmed === "---" || trimmed === "***") {
+          return <hr key={idx} className={`my-2 ${mine ? "border-primary-foreground/30" : "border-border/50"}`} />;
+        }
+
+        if (trimmed.startsWith("### ")) {
+          return (
+            <h3 key={idx} className={`font-semibold text-sm mt-3 mb-1 ${mine ? "text-primary-foreground" : "text-foreground"}`}>
+              {renderInlineFormatting(trimmed.substring(4), mine)}
+            </h3>
+          );
+        }
+        if (trimmed.startsWith("## ")) {
+          return (
+            <h2 key={idx} className={`font-bold text-base mt-4 mb-1 ${mine ? "text-primary-foreground" : "text-foreground"}`}>
+              {renderInlineFormatting(trimmed.substring(3), mine)}
+            </h2>
+          );
+        }
+        if (trimmed.startsWith("# ")) {
+          return (
+            <h1 key={idx} className={`font-extrabold text-lg mt-4 mb-2 ${mine ? "text-primary-foreground" : "text-foreground"}`}>
+              {renderInlineFormatting(trimmed.substring(2), mine)}
+            </h1>
+          );
+        }
+
+        if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+          return (
+            <ul key={idx} className="list-disc pl-5 my-0.5 space-y-0.5">
+              <li className="text-sm">{renderInlineFormatting(trimmed.substring(2), mine)}</li>
+            </ul>
+          );
+        }
+
+        const numMatch = trimmed.match(/^(\d+)\.\s(.*)/);
+        if (numMatch) {
+          return (
+            <ol key={idx} className="list-decimal pl-5 my-0.5 space-y-0.5" start={parseInt(numMatch[1])}>
+              <li className="text-sm">{renderInlineFormatting(numMatch[2], mine)}</li>
+            </ol>
+          );
+        }
+
+        if (trimmed === "") {
+          return <div key={idx} className="h-1.5" />;
+        }
+
+        return (
+          <p key={idx} className="text-sm leading-relaxed whitespace-pre-wrap">
+            {renderInlineFormatting(line, mine)}
+          </p>
+        );
+      })}
+    </div>
+  );
+};
+
 const ChatPage = () => {
   const { user } = useAuth();
   const { userId: targetUserId } = useParams();
@@ -423,7 +503,7 @@ const ChatPage = () => {
                       : "bg-muted text-foreground"
                       }`}
                   >
-                    <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                    <MarkdownText content={message.body} mine={mine} />
                     <p
                       className={`mt-2 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"
                         }`}
