@@ -680,6 +680,8 @@ export async function listConversations(currentUserId: string) {
     messagesByConversation.set(message.conversation_id, existing);
   }
 
+  const blockedIds = await getBlockedUserIds(currentUserId).catch(() => [] as string[]);
+
   return conversationIds
     .map((conversationId) => {
       const items = messagesByConversation.get(conversationId) || [];
@@ -697,6 +699,9 @@ export async function listConversations(currentUserId: string) {
         unread_count: unreadCount,
         other_user_last_read_at: otherUserReadByConversation.get(conversationId) || null,
       } satisfies ConversationSummary;
+    })
+    .filter((summary) => {
+      return !summary.other_user || !blockedIds.includes(summary.other_user.id);
     })
     .sort(
       (a, b) =>
@@ -923,4 +928,55 @@ export async function getFeedPost(postId: string, currentUserId: string): Promis
 
   const hydrated = await hydrateFeedPosts([post], currentUserId);
   return hydrated[0] || null;
+}
+
+export async function deleteConversation(conversationId: string) {
+  const { error } = await supabase
+    .from("conversations")
+    .delete()
+    .eq("id", conversationId);
+  if (error) throw error;
+}
+
+export async function clearConversationMessages(conversationId: string) {
+  const { error } = await supabase
+    .from("messages")
+    .delete()
+    .eq("conversation_id", conversationId);
+  if (error) throw error;
+}
+
+export async function blockUser(blockerId: string, blockedId: string) {
+  const { error } = await supabase
+    .from("blocks")
+    .insert({ blocker_id: blockerId, blocked_id: blockedId });
+    
+  if (error) {
+    console.warn("Could not insert into blocks table, falling back to local storage:", error.message);
+    const localBlockedKey = `blocked_users_${blockerId}`;
+    const existing = JSON.parse(localStorage.getItem(localBlockedKey) || "[]");
+    if (!existing.includes(blockedId)) {
+      existing.push(blockedId);
+      localStorage.setItem(localBlockedKey, JSON.stringify(existing));
+    }
+  }
+}
+
+export async function getBlockedUserIds(currentUserId: string): Promise<string[]> {
+  const localBlockedKey = `blocked_users_${currentUserId}`;
+  const localBlocked = JSON.parse(localStorage.getItem(localBlockedKey) || "[]");
+
+  try {
+    const { data, error } = await supabase
+      .from("blocks")
+      .select("blocked_id")
+      .eq("blocker_id", currentUserId);
+      
+    if (error) throw error;
+    const dbBlocked = (data || []).map(r => r.blocked_id);
+    return Array.from(new Set([...dbBlocked, ...localBlocked]));
+  } catch (e) {
+    console.warn("Could not fetch blocks table, using local storage:", e);
+    return localBlocked;
+  }
 }

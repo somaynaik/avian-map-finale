@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Loader2, Send, Bird, AlertCircle, Key } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Bird, AlertCircle, Key, MoreVertical } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   formatRelativeTime,
   getConversationMessages,
   getInitials,
@@ -15,6 +21,9 @@ import {
   getUserDirectoryEntry,
   markConversationRead,
   sendMessage,
+  deleteConversation,
+  clearConversationMessages,
+  blockUser,
 } from "@/lib/social";
 import { supabase } from "@/lib/supabase";
 
@@ -420,6 +429,67 @@ const ChatPage = () => {
     }
   };
 
+  const handleClearChat = async () => {
+    if (!selectedConversationId) return;
+    try {
+      await clearConversationMessages(selectedConversationId);
+      setLocalMessages([]);
+      queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      toast({
+        title: "Chat Cleared",
+        description: "All messages in this chat have been deleted.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Could not clear chat",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteChat = async () => {
+    if (!selectedConversationId) return;
+    try {
+      await deleteConversation(selectedConversationId);
+      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      toast({
+        title: "Chat Deleted",
+        description: "This conversation has been removed.",
+      });
+      navigate("/messages");
+    } catch (e: any) {
+      toast({
+        title: "Could not delete chat",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!user?.id || !targetUserId) return;
+    try {
+      await blockUser(user.id, targetUserId);
+      if (selectedConversationId && selectedConversationId !== "peregrine-bot") {
+        await deleteConversation(selectedConversationId).catch(() => {});
+      }
+      queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
+      toast({
+        title: "User Blocked",
+        description: "You have blocked this user. The conversation has been removed.",
+      });
+      navigate("/messages");
+    } catch (e: any) {
+      toast({
+        title: "Could not block user",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
@@ -474,6 +544,35 @@ const ChatPage = () => {
                 <div className="h-3 w-16 bg-muted animate-pulse rounded" />
              </div>
           </div>
+        )}
+        {targetUser && !isBot && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0 ml-auto">
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-background border border-border w-36">
+              <DropdownMenuItem
+                onClick={handleClearChat}
+                className="cursor-pointer"
+              >
+                Clear Chat
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleDeleteChat}
+                className="cursor-pointer text-destructive focus:text-destructive"
+              >
+                Delete Chat
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleBlockUser}
+                className="cursor-pointer text-destructive focus:text-destructive font-medium border-t border-border mt-1 pt-2"
+              >
+                Block User
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </header>
 
