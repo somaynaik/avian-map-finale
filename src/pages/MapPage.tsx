@@ -454,14 +454,16 @@ const MapPage = () => {
       let label = "";
       let schedRating = "";
       let schedColor = "";
+      let note = "";
       if (h >= 4 && h < 6)         { label = "Peak dawn chorus";     schedRating = "🟢 Peak";     schedColor = "text-green-500"; }
-      else if (h >= 6 && h <= 10)  { label = "Prime foraging";       schedRating = "🟢 Prime";    schedColor = "text-green-500"; }
+      else if (h === 6)            { label = "Prime foraging";       schedRating = "🟢 Prime";    schedColor = "text-green-500"; note = "Low light — photography may be difficult"; }
+      else if (h >= 7 && h <= 10)  { label = "Prime foraging";       schedRating = "🟢 Prime";    schedColor = "text-green-500"; }
       else if (h >= 11 && h <= 12) { label = "Moderate activity";    schedRating = "🟡 Moderate"; schedColor = "text-yellow-500"; }
       else if (h >= 13 && h <= 15) { label = "Mid-day slow";         schedRating = "🟡 Slow";     schedColor = "text-yellow-500"; }
       else if (h >= 16 && h <= 18) { label = "Roosting return";      schedRating = "🟢 Good";     schedColor = "text-green-500"; }
       else if (h >= 19 && h <= 21) { label = "Winding down";         schedRating = "🔴 Low";      schedColor = "text-red-500"; }
       else                          { label = "Birds roosting";       schedRating = "🔴 None";     schedColor = "text-red-500"; }
-      return { h, label, schedRating, schedColor };
+      return { h, label, schedRating, schedColor, note };
     });
 
     return {
@@ -1686,7 +1688,7 @@ const MapPage = () => {
                   <div className="border-t border-border pt-3">
                     <p className="text-[11px] font-bold mb-2 text-foreground">24-Hour Schedule</p>
                     <div className="space-y-0.5 max-h-52 overflow-y-auto pr-1">
-                      {weatherAnalysis.hourlySchedule.map(({ h, label, schedRating, schedColor }) => {
+                      {weatherAnalysis.hourlySchedule.map(({ h, label, schedRating, schedColor, note }) => {
                         const isCurrent = h === weatherAnalysis.hour;
                         const fmt = (hr: number) =>
                           `${String(hr).padStart(2, "0")}:00 – ${String(hr + 1).padStart(2, "0")}:00`;
@@ -1705,6 +1707,7 @@ const MapPage = () => {
                             <div className="flex flex-col items-end gap-0">
                               <span className={`${schedColor} font-semibold`}>{schedRating}</span>
                               <span className="text-muted-foreground text-[9px]">{label}</span>
+                              {note && <span className="text-orange-400 text-[9px] italic">{note}</span>}
                             </div>
                           </div>
                         );
