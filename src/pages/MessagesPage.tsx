@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Bird, Loader2, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,9 +19,44 @@ const MessagesPage = () => {
   });
 
   const filteredConversations = useMemo(() => {
+    let botLastMessage = "Ask me anything about birds!";
+    let botLastMessageAt = new Date().toISOString();
+    try {
+      const stored = localStorage.getItem("peregrine_messages");
+      if (stored) {
+        const msgs = JSON.parse(stored);
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.body) {
+            botLastMessage = lastMsg.body;
+            botLastMessageAt = lastMsg.created_at || botLastMessageAt;
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    const peregrineBot = {
+      id: "peregrine-bot",
+      other_user: {
+        id: "peregrine-bot",
+        username: "peregrine",
+        full_name: "Peregrine",
+        avatar_url: null,
+      },
+      last_message: botLastMessage,
+      last_message_at: botLastMessageAt,
+      unread_count: 0,
+    };
+
     const term = search.trim().toLowerCase();
-    if (!term) return conversations;
-    return conversations.filter((conversation) => {
+    if (!term) {
+      return [peregrineBot, ...conversations];
+    }
+
+    const allConversations = [peregrineBot, ...conversations];
+    return allConversations.filter((conversation) => {
       const label = conversation.other_user?.full_name || conversation.other_user?.username || "";
       return label.toLowerCase().includes(term) || conversation.last_message.toLowerCase().includes(term);
     });
@@ -69,16 +104,31 @@ const MessagesPage = () => {
                   className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-muted/50"
                 >
                   <Avatar className="h-11 w-11 border border-border">
-                    <AvatarImage
-                      src={conversation.other_user?.avatar_url || undefined}
-                      alt={label}
-                    />
-                    <AvatarFallback>{getInitials(conversation.other_user)}</AvatarFallback>
+                    {conversation.id === "peregrine-bot" ? (
+                      <div className="flex h-full w-full items-center justify-center bg-primary/10 text-primary">
+                        <Bird className="h-5 w-5" />
+                      </div>
+                    ) : (
+                      <>
+                        <AvatarImage
+                          src={conversation.other_user?.avatar_url || undefined}
+                          alt={label}
+                        />
+                        <AvatarFallback>{getInitials(conversation.other_user)}</AvatarFallback>
+                      </>
+                    )}
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-semibold">{label}</p>
-                      <span className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="truncate text-sm font-semibold">{label}</p>
+                        {conversation.id === "peregrine-bot" && (
+                          <span className="bg-primary/15 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                            AI Bot
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {conversation.last_message_at === "1970-01-01T00:00:00.000Z"
                           ? ""
                           : formatRelativeTime(conversation.last_message_at)}
