@@ -19,46 +19,45 @@ const MessagesPage = () => {
   });
 
   const filteredConversations = useMemo(() => {
-    let botLastMessage = "Ask me anything about birds!";
-    let botLastMessageAt = new Date().toISOString();
-    try {
-      const stored = localStorage.getItem("peregrine_messages");
-      if (stored) {
-        const msgs = JSON.parse(stored);
-        if (Array.isArray(msgs) && msgs.length > 0) {
-          const lastMsg = msgs[msgs.length - 1];
-          if (lastMsg && lastMsg.body) {
-            botLastMessage = lastMsg.body;
-            botLastMessageAt = lastMsg.created_at || botLastMessageAt;
-          }
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    const hasBotConv = conversations.some(
+      (c) => c.other_user?.id === "00000000-0000-0000-0000-000000000000"
+    );
 
-    const peregrineBot = {
-      id: "peregrine-bot",
-      other_user: {
-        id: "peregrine-bot",
-        username: "peregrine",
-        full_name: "Peregrine",
-        avatar_url: "/peregrine-avatar.jpg",
-      },
-      last_message: botLastMessage,
-      last_message_at: botLastMessageAt,
-      unread_count: 0,
-    };
+    let result = [...conversations];
+
+    if (!hasBotConv) {
+      const peregrineBotPreview = {
+        id: "peregrine-bot-preview",
+        other_user: {
+          id: "00000000-0000-0000-0000-000000000000",
+          username: "peregrine",
+          full_name: "Peregrine",
+          avatar_url: "/peregrine-avatar.jpg",
+          bio: "System Chatbot",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        last_message: "Ask me anything about birds!",
+        last_message_at: new Date().toISOString(),
+        unread_count: 0,
+        other_user_last_read_at: null,
+      } as ConversationSummary;
+
+      result = [peregrineBotPreview, ...conversations];
+    }
 
     const term = search.trim().toLowerCase();
     if (!term) {
-      return [peregrineBot, ...conversations];
+      return result;
     }
 
-    const allConversations = [peregrineBot, ...conversations];
-    return allConversations.filter((conversation) => {
-      const label = conversation.other_user?.full_name || conversation.other_user?.username || "";
-      return label.toLowerCase().includes(term) || conversation.last_message.toLowerCase().includes(term);
+    return result.filter((conversation) => {
+      const label =
+        conversation.other_user?.full_name || conversation.other_user?.username || "";
+      return (
+        label.toLowerCase().includes(term) ||
+        conversation.last_message.toLowerCase().includes(term)
+      );
     });
   }, [conversations, search]);
 
@@ -104,7 +103,7 @@ const MessagesPage = () => {
                   className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-muted/50"
                 >
                   <Avatar className="h-11 w-11 border border-border">
-                    {conversation.id === "peregrine-bot" ? (
+                    {conversation.other_user?.id === "00000000-0000-0000-0000-000000000000" ? (
                       <>
                         <AvatarImage
                           src="/peregrine-avatar.jpg"
@@ -128,7 +127,7 @@ const MessagesPage = () => {
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <p className="truncate text-sm font-semibold">{label}</p>
-                        {conversation.id === "peregrine-bot" && (
+                        {conversation.other_user?.id === "00000000-0000-0000-0000-000000000000" && (
                           <span className="bg-primary/15 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
                             AI Bot
                           </span>

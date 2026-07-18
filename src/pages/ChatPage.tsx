@@ -113,7 +113,7 @@ const ChatPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const isBot = targetUserId === "peregrine-bot";
+  const isBot = targetUserId === "00000000-0000-0000-0000-000000000000";
 
   const [draft, setDraft] = useState("");
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -129,30 +129,6 @@ const ChatPage = () => {
   const [newKeyInput, setNewKeyInput] = useState("");
   const [isBotTyping, setIsBotTyping] = useState(false);
 
-  const [localMessages, setLocalMessages] = useState<any[]>(() => {
-    if (isBot) {
-      try {
-        const stored = localStorage.getItem("peregrine_messages");
-        if (stored) {
-          return JSON.parse(stored);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      const initial = [
-        {
-          id: "peregrine-welcome",
-          sender_id: "peregrine-bot",
-          body: "Hello birdwatcher! 🐦 I am Peregrine, your falcon AI assistant. Ask me anything about birds, coordinates, nesting habits, or other birding stuff in general!",
-          created_at: new Date().toISOString(),
-        }
-      ];
-      localStorage.setItem("peregrine_messages", JSON.stringify(initial));
-      return initial;
-    }
-    return [];
-  });
-
   const { data: dbTargetUser } = useQuery({
     queryKey: ["user-profile", user?.id, targetUserId],
     queryFn: () => getUserDirectoryEntry(user!.id, targetUserId!),
@@ -160,7 +136,7 @@ const ChatPage = () => {
   });
 
   const targetUser = isBot ? {
-    id: "peregrine-bot",
+    id: "00000000-0000-0000-0000-000000000000",
     username: "peregrine",
     full_name: "Peregrine",
     avatar_url: "/peregrine-avatar.jpg",
@@ -168,10 +144,6 @@ const ChatPage = () => {
 
   useEffect(() => {
     if (!user?.id || !targetUserId) return;
-    if (isBot) {
-      setSelectedConversationId("peregrine-bot");
-      return;
-    }
 
     let isMounted = true;
     getOrCreateDirectConversation(user.id, targetUserId)
@@ -191,16 +163,27 @@ const ChatPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [targetUserId, user?.id, navigate, isBot]);
+  }, [targetUserId, user?.id, navigate]);
 
   const { data: dbMessages = [], isLoading: dbMessagesLoading } = useQuery({
     queryKey: ["messages", selectedConversationId],
     queryFn: () => getConversationMessages(selectedConversationId!),
-    enabled: !!selectedConversationId && !isBot,
+    enabled: !!selectedConversationId,
   });
 
-  const messages = isBot ? localMessages : dbMessages;
-  const messagesLoading = isBot ? false : dbMessagesLoading;
+  const messages = dbMessages;
+  const messagesLoading = dbMessagesLoading;
+
+  // Auto-inject initial welcome message for chatbot conversation if completely empty
+  useEffect(() => {
+    if (isBot && selectedConversationId && dbMessages && dbMessages.length === 0 && !dbMessagesLoading) {
+      sendMessage(selectedConversationId, "00000000-0000-0000-0000-000000000000", "Hello birdwatcher! 🐦 I am Peregrine, your falcon AI assistant. Ask me anything about birds, coordinates, nesting habits, or other birding stuff in general!")
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+        })
+        .catch(console.error);
+    }
+  }, [isBot, selectedConversationId, dbMessages?.length, dbMessagesLoading, queryClient]);
 
   // Calculate the other user's last read based on the full conversation summary.
   const { data: participants } = useQuery({
@@ -299,17 +282,13 @@ const ChatPage = () => {
 
   const sendMutation = useMutation({
     mutationFn: async () => {
+      const userText = draft.trim();
+      if (!userText || !selectedConversationId) return;
+
       if (isBot) {
-        const userMsg = {
-          id: `msg-${Date.now()}`,
-          sender_id: user!.id,
-          body: draft.trim(),
-          created_at: new Date().toISOString()
-        };
-        const updatedMsgs = [...localMessages, userMsg];
-        setLocalMessages(updatedMsgs);
-        localStorage.setItem("peregrine_messages", JSON.stringify(updatedMsgs));
         setDraft("");
+        await sendMessage(selectedConversationId, user!.id, userText);
+        queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
         
         setIsBotTyping(true);
         try {
@@ -317,7 +296,9 @@ const ChatPage = () => {
             throw new Error("Gemini API Key is missing. Please save your API Key first.");
           }
 
-          const formattedHistory = updatedMsgs.slice(-15).map(m => ({
+          const currentMsgs = await getConversationMessages(selectedConversationId);
+
+          const formattedHistory = currentMsgs.slice(-15).map(m => ({
             role: m.sender_id === user!.id ? "user" : "model",
             parts: [{ text: m.body }]
           }));
@@ -377,48 +358,31 @@ const ChatPage = () => {
           const resData = await response.json();
           const replyText = resData?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't process that. Try asking again!";
           
-          const botMsg = {
-            id: `msg-${Date.now() + 1}`,
-            sender_id: "peregrine-bot",
-            body: replyText,
-            created_at: new Date().toISOString()
-          };
-          
-          const finalMsgs = [...updatedMsgs, botMsg];
-          setLocalMessages(finalMsgs);
-          localStorage.setItem("peregrine_messages", JSON.stringify(finalMsgs));
+          await sendMessage(selectedConversationId, "00000000-0000-0000-0000-000000000000", replyText);
         } catch (error: any) {
-          const errBotMsg = {
-            id: `msg-${Date.now() + 2}`,
-            sender_id: "peregrine-bot",
-            body: `⚠️ Error: ${error.message || "Something went wrong. Please check your internet connection or Gemini API key."}`,
-            created_at: new Date().toISOString()
-          };
-          const finalMsgs = [...updatedMsgs, errBotMsg];
-          setLocalMessages(finalMsgs);
-          localStorage.setItem("peregrine_messages", JSON.stringify(finalMsgs));
+          const errMsgText = `⚠️ Error: ${error.message || "Something went wrong. Please check your internet connection or Gemini API key."}`;
+          await sendMessage(selectedConversationId, "00000000-0000-0000-0000-000000000000", errMsgText).catch(() => {});
         } finally {
           setIsBotTyping(false);
+          queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+          queryClient.invalidateQueries({ queryKey: ["conversations", user!.id] });
         }
         return;
       }
-      return sendMessage(selectedConversationId!, user!.id, draft);
+
+      await sendMessage(selectedConversationId, user!.id, userText);
+      setDraft("");
     },
     onSuccess: () => {
-      if (!isBot) {
-        setDraft("");
-        queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
-        queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
-      }
+      queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
     },
     onError: (error: Error) => {
-      if (!isBot) {
-        toast({
-          title: "Could not send message",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Could not send message",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
