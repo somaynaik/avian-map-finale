@@ -495,25 +495,6 @@ const ChatPage = () => {
         </div>
       )}
 
-      {isBot && apiKey && (
-        <div className="mx-4 my-1 flex justify-end shrink-0">
-          <button
-            onClick={() => {
-              localStorage.removeItem("peregrine_gemini_api_key");
-              setApiKey("");
-              setNewKeyInput("");
-              toast({
-                title: "API Key Cleared",
-                description: "Enter a new key if you want to resume chatting.",
-              });
-            }}
-            className="text-[10px] text-muted-foreground hover:text-foreground underline transition-colors"
-          >
-            Change API Key
-          </button>
-        </div>
-      )}
-
       {/* Input */}
       <form
         onSubmit={(event) => {
