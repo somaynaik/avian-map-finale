@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { formatRelativeTime, getInitials, listConversations } from "@/lib/social";
+import { formatRelativeTime, getInitials, listConversations, type ConversationSummary } from "@/lib/social";
 
 const MessagesPage = () => {
   const { user } = useAuth();
