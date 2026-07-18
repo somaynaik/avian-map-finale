@@ -70,7 +70,7 @@ const ChatPage = () => {
     id: "peregrine-bot",
     username: "peregrine",
     full_name: "Peregrine",
-    avatar_url: null,
+    avatar_url: "/peregrine-avatar.jpg",
   } : dbTargetUser;
 
   useEffect(() => {
@@ -351,9 +351,15 @@ const ChatPage = () => {
           <>
             <Avatar className="h-10 w-10 border border-border">
               {isBot ? (
-                <div className="flex h-full w-full items-center justify-center bg-primary/10 text-primary">
-                  <Bird className="h-5 w-5" />
-                </div>
+                <>
+                  <AvatarImage
+                    src="/peregrine-avatar.jpg"
+                    alt={targetUser?.username || "User"}
+                  />
+                  <AvatarFallback>
+                    <Bird className="h-5 w-5" />
+                  </AvatarFallback>
+                </>
               ) : (
                 <>
                   <AvatarImage

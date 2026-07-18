@@ -43,7 +43,7 @@ const MessagesPage = () => {
         id: "peregrine-bot",
         username: "peregrine",
         full_name: "Peregrine",
-        avatar_url: null,
+        avatar_url: "/peregrine-avatar.jpg",
       },
       last_message: botLastMessage,
       last_message_at: botLastMessageAt,
@@ -105,9 +105,15 @@ const MessagesPage = () => {
                 >
                   <Avatar className="h-11 w-11 border border-border">
                     {conversation.id === "peregrine-bot" ? (
-                      <div className="flex h-full w-full items-center justify-center bg-primary/10 text-primary">
-                        <Bird className="h-5 w-5" />
-                      </div>
+                      <>
+                        <AvatarImage
+                          src="/peregrine-avatar.jpg"
+                          alt={label}
+                        />
+                        <AvatarFallback>
+                          <Bird className="h-5 w-5" />
+                        </AvatarFallback>
+                      </>
                     ) : (
                       <>
                         <AvatarImage
