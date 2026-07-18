@@ -74,29 +74,70 @@ Deno.serve(async () => {
       actorProfile?.full_name?.trim() || actorProfile?.username || "A birdwatcher";
 
     let subject = "";
+    let text = "";
     let html = "";
 
     if (job.type === "new_follower") {
-      subject = "You have a new follower";
+      subject = `🐦 ${actorName} is now following you on Avian Map`;
+      text = `Hello birdwatcher!\n\n${actorName} just started following you on Avian Map. Open the app to view their profile:\nhttps://avian-map.vercel.app\n\nHappy birding,\nThe Avian Map Team`;
       html = `
-        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-          <h2>You have a new follower</h2>
-          <p><strong>${actorName}</strong> just followed you on Avian Map.</p>
-          <p>Open the app to view their profile or send them a message.</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f4; padding: 32px 16px; margin: 0; min-height: 100%;">
+          <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <div style="background-color: #15803d; padding: 24px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em;">Avian Map</h1>
+            </div>
+            <div style="padding: 32px 24px; color: #1c1917;">
+              <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #1c1917;">You have a new follower!</h2>
+              <p style="margin-bottom: 24px; font-size: 15px; line-height: 1.6; color: #44403c;">
+                <strong>${actorName}</strong> just started following you on Avian Map. You can now message them, share coordinate sightings, or track mutual updates.
+              </p>
+              <div style="text-align: center; margin: 32px 0 16px 0;">
+                <a href="https://avian-map.vercel.app" style="background-color: #15803d; color: #ffffff; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 8px; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(21, 128, 61, 0.2);">
+                  View Profile
+                </a>
+              </div>
+            </div>
+            <div style="background-color: #fafaf9; border-top: 1px solid #e7e5e4; padding: 20px 24px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #78716c; line-height: 1.5;">
+                You received this notification because you are a registered user of Avian Map.<br>
+                To opt-out of email alerts, update your preferences in the app profile settings.
+              </p>
+            </div>
+          </div>
         </div>
       `;
     } else if (job.type === "new_message") {
-      subject = `New message from ${actorName}`;
+      subject = `💬 New message from ${actorName} on Avian Map`;
       const msgBody = typeof job.payload.body === 'string' ? job.payload.body : '';
       const snippet = msgBody.length > 200 ? msgBody.substring(0, 200) + '...' : msgBody;
+      text = `Hello birdwatcher!\n\nYou received a new message from ${actorName} on Avian Map:\n\n"${snippet}"\n\nOpen the app to reply:\nhttps://avian-map.vercel.app\n\nHappy birding,\nThe Avian Map Team`;
       html = `
-        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-          <h2>New message from ${actorName}</h2>
-          <p>You have received a new direct message from <strong>${actorName}</strong> on Avian Map.</p>
-          <p style="padding: 12px; background: #f4f4f5; border-radius: 8px; font-style: italic; color: #3f3f46;">
-            "${snippet}"
-          </p>
-          <p>Open the app to reply.</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f4; padding: 32px 16px; margin: 0; min-height: 100%;">
+          <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <div style="background-color: #15803d; padding: 24px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em;">Avian Map</h1>
+            </div>
+            <div style="padding: 32px 24px; color: #1c1917;">
+              <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #1c1917;">New message received</h2>
+              <p style="margin-bottom: 20px; font-size: 15px; line-height: 1.6; color: #44403c;">
+                <strong>${actorName}</strong> sent you a direct message:
+              </p>
+              <div style="background-color: #fafaf9; border-left: 4px solid #15803d; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 15px; line-height: 1.5; color: #1c1917; font-style: italic;">
+                "${snippet}"
+              </div>
+              <div style="text-align: center; margin: 32px 0 16px 0;">
+                <a href="https://avian-map.vercel.app" style="background-color: #15803d; color: #ffffff; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 8px; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(21, 128, 61, 0.2);">
+                  Reply to ${actorName}
+                </a>
+              </div>
+            </div>
+            <div style="background-color: #fafaf9; border-top: 1px solid #e7e5e4; padding: 20px 24px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #78716c; line-height: 1.5;">
+                You received this notification because you are a registered user of Avian Map.<br>
+                To opt-out of email alerts, update your preferences in the app profile settings.
+              </p>
+            </div>
+          </div>
         </div>
       `;
     } else {
@@ -122,7 +163,13 @@ Deno.serve(async () => {
         from: emailFrom,
         to: recipientAuth.data.user.email,
         subject,
+        text,
         html,
+        headers: {
+          "Precedence": "bulk",
+          "X-Auto-Response-Loop": "auto-generated",
+          "Auto-Submitted": "auto-generated",
+        }
       });
     } catch (error: any) {
       console.error(`Failed to send email for job ${job.id}:`, error);
