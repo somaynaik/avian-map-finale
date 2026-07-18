@@ -37,3 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages (created_a
 CREATE INDEX IF NOT EXISTS idx_email_notifications_recipient_id ON public.email_notifications (recipient_user_id);
 CREATE INDEX IF NOT EXISTS idx_email_notifications_actor_id ON public.email_notifications (actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_email_notifications_processed_at ON public.email_notifications (processed_at);
+
+-- 3. Indexes for blocks table
+CREATE INDEX IF NOT EXISTS idx_blocks_blocker_id ON public.blocks (blocker_id);
+CREATE INDEX IF NOT EXISTS idx_blocks_blocked_id ON public.blocks (blocked_id);
