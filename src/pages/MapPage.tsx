@@ -188,7 +188,7 @@ const MapPage = () => {
 
   const speakInstruction = (text: string) => {
     if (Capacitor.isNativePlatform()) {
-      TextToSpeech.stop().catch(() => {});
+      TextToSpeech.stop().catch(() => { });
       TextToSpeech.speak({
         text: text,
         lang: 'en-US',
@@ -230,7 +230,7 @@ const MapPage = () => {
   useEffect(() => {
     if (!isNavigating) {
       if (Capacitor.isNativePlatform()) {
-        TextToSpeech.stop().catch(() => {});
+        TextToSpeech.stop().catch(() => { });
       } else {
         if (typeof window !== "undefined" && window.speechSynthesis) {
           window.speechSynthesis.cancel();
@@ -359,11 +359,11 @@ const MapPage = () => {
     const code = weatherData.weather_code;
 
     const hour = new Date().getHours();
-    const isDeepNight   = hour >= 22 || hour < 4;   // 10pm – 4am
-    const isDawn        = hour >= 4  && hour < 6;   // 4am – 6am  🌅 PEAK
-    const isMorning     = hour >= 6  && hour <= 10; // 6am – 10am ✅ Prime
-    const isMidday      = hour >= 11 && hour <= 15; // 11am – 3pm ⚡ Slower
-    const isEarlyEvening= hour >= 16 && hour <= 18; // 4pm – 6pm  🌇 Roosting
+    const isDeepNight = hour >= 22 || hour < 4;   // 10pm – 4am
+    const isDawn = hour >= 4 && hour < 6;   // 4am – 6am  🌅 PEAK
+    const isMorning = hour >= 6 && hour <= 10; // 6am – 10am ✅ Prime
+    const isMidday = hour >= 11 && hour <= 15; // 11am – 3pm ⚡ Slower
+    const isEarlyEvening = hour >= 16 && hour <= 18; // 4pm – 6pm  🌇 Roosting
     const isLateEvening = hour >= 19 && hour <= 21; // 7pm – 9pm  ❌ Not optimal
 
     let desc = "Clear Sky";
@@ -455,14 +455,15 @@ const MapPage = () => {
       let schedRating = "";
       let schedColor = "";
       let note = "";
-      if (h >= 4 && h < 6)         { label = "Peak dawn chorus";     schedRating = "🟢 Peak";     schedColor = "text-green-500"; }
-      else if (h === 6)            { label = "Prime foraging";       schedRating = "🟢 Prime";    schedColor = "text-green-500"; note = "Low light — photography may be difficult"; }
-      else if (h >= 7 && h <= 10)  { label = "Prime foraging";       schedRating = "🟢 Prime";    schedColor = "text-green-500"; }
-      else if (h >= 11 && h <= 12) { label = "Moderate activity";    schedRating = "🟡 Moderate"; schedColor = "text-yellow-500"; }
-      else if (h >= 13 && h <= 15) { label = "Mid-day slow";         schedRating = "🟡 Slow";     schedColor = "text-yellow-500"; }
-      else if (h >= 16 && h <= 18) { label = "Roosting return";      schedRating = "🟢 Good";     schedColor = "text-green-500"; }
-      else if (h >= 19 && h <= 21) { label = "Winding down";         schedRating = "🔴 Low";      schedColor = "text-red-500"; }
-      else                          { label = "Birds roosting";       schedRating = "🔴 None";     schedColor = "text-red-500"; }
+      if (h >= 4 && h < 6) { label = "Peak dawn chorus"; schedRating = "🟢 Peak"; schedColor = "text-green-500"; note = "Low light — photography may be difficult"; }
+      else if (h === 6) { label = "Prime foraging"; schedRating = "🟢 Prime"; schedColor = "text-green-500"; note = "Low light — photography may be difficult"; }
+      else if (h >= 7 && h <= 10) { label = "Prime foraging"; schedRating = "🟢 Prime"; schedColor = "text-green-500"; }
+      else if (h >= 11 && h <= 12) { label = "Moderate activity"; schedRating = "🟡 Moderate"; schedColor = "text-yellow-500"; }
+      else if (h >= 13 && h <= 15) { label = "Mid-day slow"; schedRating = "🟡 Slow"; schedColor = "text-yellow-500"; }
+      else if (h >= 16 && h <= 17) { label = "Roosting return"; schedRating = "🟢 Good"; schedColor = "text-green-500"; }
+      else if (h === 18) { label = "Roosting return"; schedRating = "🟢 Good"; schedColor = "text-green-500"; note = "Poor light for photography"; }
+      else if (h >= 19 && h <= 21) { label = "Winding down"; schedRating = "🔴 Low"; schedColor = "text-red-500"; }
+      else { label = "Birds roosting"; schedRating = "🔴 None"; schedColor = "text-red-500"; note = "Poor light for photography"; }
       return { h, label, schedRating, schedColor, note };
     });
 
@@ -1695,11 +1696,10 @@ const MapPage = () => {
                         return (
                           <div
                             key={h}
-                            className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[10px] ${
-                              isCurrent
-                                ? "bg-primary/15 border border-primary/30 font-bold"
-                                : "hover:bg-muted/40"
-                            }`}
+                            className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[10px] ${isCurrent
+                              ? "bg-primary/15 border border-primary/30 font-bold"
+                              : "hover:bg-muted/40"
+                              }`}
                           >
                             <span className={`font-mono ${isCurrent ? "text-primary" : "text-muted-foreground"}`}>
                               {fmt(h)}{isCurrent ? " ← now" : ""}
@@ -1725,55 +1725,55 @@ const MapPage = () => {
         {selectedSighting && !isNavigating && (
           <div className="absolute bottom-[calc(var(--nav-height)+16px)] left-4 right-4 md:left-auto md:w-96 z-20 bg-card/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-border p-4 animate-in slide-in-from-bottom duration-200">
             <div className="flex justify-between items-start gap-3">
-            {selectedSighting.isCommunity && selectedSighting.imageUrl ? (
-              selectedSighting.imageUrl.toLowerCase().includes('.mp4') || selectedSighting.imageUrl.toLowerCase().includes('.mov') || selectedSighting.imageUrl.toLowerCase().includes('.webm') ? (
-                <video
-                  src={selectedSighting.imageUrl}
-                  className="h-16 w-16 rounded-xl object-cover shrink-0"
-                  preload="metadata"
-                  muted
-                />
+              {selectedSighting.isCommunity && selectedSighting.imageUrl ? (
+                selectedSighting.imageUrl.toLowerCase().includes('.mp4') || selectedSighting.imageUrl.toLowerCase().includes('.mov') || selectedSighting.imageUrl.toLowerCase().includes('.webm') ? (
+                  <video
+                    src={selectedSighting.imageUrl}
+                    className="h-16 w-16 rounded-xl object-cover shrink-0"
+                    preload="metadata"
+                    muted
+                  />
+                ) : (
+                  <img
+                    src={selectedSighting.imageUrl}
+                    alt={selectedSighting.comName}
+                    className="h-16 w-16 rounded-xl object-cover shrink-0"
+                  />
+                )
               ) : (
-                <img
-                  src={selectedSighting.imageUrl}
-                  alt={selectedSighting.comName}
-                  className="h-16 w-16 rounded-xl object-cover shrink-0"
+                <BirdImage
+                  scientificName={selectedSighting.sciName}
+                  commonName={selectedSighting.comName}
+                  className="h-16 w-16 rounded-xl"
                 />
-              )
-            ) : (
-              <BirdImage
-                scientificName={selectedSighting.sciName}
-                commonName={selectedSighting.comName}
-                className="h-16 w-16 rounded-xl"
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <span className="inline-block bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">
-                Selected Destination
-              </span>
-              <h3 className="font-semibold text-base text-foreground truncate">{selectedSighting.comName}</h3>
-              {selectedSighting.isCommunity && selectedSighting.authorName ? (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  by @{selectedSighting.authorName}
-                </p>
-              ) : selectedSighting.sciName ? (
-                <p className="text-xs text-muted-foreground italic truncate mt-0.5 flex items-center gap-1.5">
-                  {selectedSighting.sciName}
-                  <a
-                    href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
-                      selectedSighting.sciName
-                        .split(" ")
-                        .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
-                        .join("_")
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-primary hover:underline font-semibold ml-1 shrink-0"
-                  >
-                    (Know More <ExternalLink className="w-3 h-3" />)
-                  </a>
-                </p>
-              ) : null}
+              )}
+              <div className="flex-1 min-w-0">
+                <span className="inline-block bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">
+                  Selected Destination
+                </span>
+                <h3 className="font-semibold text-base text-foreground truncate">{selectedSighting.comName}</h3>
+                {selectedSighting.isCommunity && selectedSighting.authorName ? (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    by @{selectedSighting.authorName}
+                  </p>
+                ) : selectedSighting.sciName ? (
+                  <p className="text-xs text-muted-foreground italic truncate mt-0.5 flex items-center gap-1.5">
+                    {selectedSighting.sciName}
+                    <a
+                      href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
+                        selectedSighting.sciName
+                          .split(" ")
+                          .map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+                          .join("_")
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-primary hover:underline font-semibold ml-1 shrink-0"
+                    >
+                      (Know More <ExternalLink className="w-3 h-3" />)
+                    </a>
+                  </p>
+                ) : null}
 
                 <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
                   <MapPin className="w-3.5 h-3.5" />
