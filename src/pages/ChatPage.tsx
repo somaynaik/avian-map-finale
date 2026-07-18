@@ -200,14 +200,14 @@ const ChatPage = () => {
   });
 
   useEffect(() => {
-    if (!selectedConversationId || !user?.id || !messages.length || isBot) return;
+    if (!selectedConversationId || !user?.id || !messages.length) return;
 
     markConversationRead(selectedConversationId, user.id)
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
       })
       .catch(() => undefined);
-  }, [messages.length, queryClient, selectedConversationId, user?.id, isBot]);
+  }, [messages.length, queryClient, selectedConversationId, user?.id]);
 
   useEffect(() => {
     if (!selectedConversationId || !user?.id || isBot) return;
