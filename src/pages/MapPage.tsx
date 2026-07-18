@@ -358,17 +358,30 @@ const MapPage = () => {
     const wind = weatherData.wind_speed_10m;
     const code = weatherData.weather_code;
 
+    const hour = new Date().getHours();
+    const isDeepNight   = hour >= 22 || hour < 4;   // 10pm – 4am
+    const isDawn        = hour >= 4  && hour < 6;   // 4am – 6am  🌅 PEAK
+    const isMorning     = hour >= 6  && hour <= 10; // 6am – 10am ✅ Prime
+    const isMidday      = hour >= 11 && hour <= 15; // 11am – 3pm ⚡ Slower
+    const isEarlyEvening= hour >= 16 && hour <= 18; // 4pm – 6pm  🌇 Roosting
+    const isLateEvening = hour >= 19 && hour <= 21; // 7pm – 9pm  ❌ Not optimal
+
     let desc = "Clear Sky";
     let icon = "☀️";
 
-    if (code === 0) { desc = "Clear Sky"; icon = "☀️"; }
-    else if (code >= 1 && code <= 3) { desc = "Partly Cloudy"; icon = "⛅"; }
+    if (code === 0) { desc = "Clear Sky"; icon = isDeepNight || isDawn ? "🌙" : "☀️"; }
+    else if (code >= 1 && code <= 3) { desc = "Partly Cloudy"; icon = isDeepNight || isDawn ? "🌙" : "⛅"; }
     else if (code === 45 || code === 48) { desc = "Foggy"; icon = "🌫️"; }
     else if (code >= 51 && code <= 55) { desc = "Drizzle"; icon = "🌧️"; }
     else if (code >= 61 && code <= 65) { desc = "Rainy"; icon = "🌧️"; }
     else if (code >= 71 && code <= 77) { desc = "Snowy"; icon = "❄️"; }
     else if (code >= 80 && code <= 82) { desc = "Showers"; icon = "🌦️"; }
     else if (code >= 95 && code <= 99) { desc = "Thunderstorm"; icon = "⛈️"; }
+
+    // Night override for clear/cloudy icons
+    if ((isDeepNight || isDawn) && (code === 0 || (code >= 1 && code <= 3))) {
+      icon = "🌙";
+    }
 
     let score = 100;
     let reasons: string[] = [];
@@ -385,17 +398,17 @@ const MapPage = () => {
     if (wind > 25) { score -= 25; reasons.push("High winds"); }
     else if (wind > 15) { score -= 10; reasons.push("Breezy winds"); }
 
-    const hour = new Date().getHours();
-    const isNight = hour >= 20 || hour < 6;
-    const isMorning = hour >= 6 && hour <= 10;
-    const isEvening = hour >= 16 && hour <= 19;
-
-    if (isNight) {
+    if (isDeepNight) {
       score = 0;
-      reasons.push("Night time - low visibility");
-    } else if (!isMorning && !isEvening) {
+      reasons.push("Deep night – birds are roosting");
+    } else if (isDawn) {
+      score = Math.min(score, 95);
+    } else if (isLateEvening) {
+      score = Math.min(score, 30);
+      reasons.push("Past roosting window");
+    } else if (isMidday) {
       score -= 15;
-      reasons.push("Mid-day low activity");
+      reasons.push("Mid-day – lower bird activity");
     }
 
     score = Math.max(0, score);
@@ -403,7 +416,7 @@ const MapPage = () => {
     let rating = "Fair";
     let color = "text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30";
     let barColor = "bg-yellow-500";
-    if (isNight) {
+    if (isDeepNight || (isLateEvening && score < 30)) {
       rating = "Not Optimal";
       color = "text-destructive bg-destructive/10";
       barColor = "bg-destructive";
@@ -418,13 +431,38 @@ const MapPage = () => {
     }
 
     let tip = "Perfect weather to spot local birds. Grab your binoculars!";
-    if (isNight) {
-      tip = "Birds are nesting and sleeping. Night time is not optimal for bird watching.";
+    if (isDeepNight) {
+      tip = "🌙 Birds are roosting and asleep. Night time is not optimal for birdwatching.";
+    } else if (isDawn) {
+      tip = "🌅 Dawn chorus is at its peak! This is the single best window — birds are most vocal and active right now.";
+    } else if (isMorning) {
+      tip = "☀️ Prime birdwatching time. Birds are actively foraging and singing. Head out now!";
+    } else if (isMidday) {
+      tip = "🌤️ Mid-day lull — bird activity slows as temperatures rise. Look near water bodies or shaded trees.";
+    } else if (isEarlyEvening) {
+      tip = "🌇 Evening roosting window — you can observe birds returning to their roosting sites. Great for watching flocking behaviour.";
+    } else if (isLateEvening) {
+      tip = "🌆 Getting late — most birds have settled in for the night. Not the best window anymore.";
     } else if (score < 50) {
       tip = "Birds seek shelter during harsh weather. Better to wait it out.";
     } else if (score < 80) {
       tip = "Activity might be slower. Look near water bodies or sheltered trees.";
     }
+
+    // 24-hour birdwatching schedule
+    const hourlySchedule = Array.from({ length: 24 }, (_, h) => {
+      let label = "";
+      let schedRating = "";
+      let schedColor = "";
+      if (h >= 4 && h < 6)         { label = "Peak dawn chorus";     schedRating = "🟢 Peak";     schedColor = "text-green-500"; }
+      else if (h >= 6 && h <= 10)  { label = "Prime foraging";       schedRating = "🟢 Prime";    schedColor = "text-green-500"; }
+      else if (h >= 11 && h <= 12) { label = "Moderate activity";    schedRating = "🟡 Moderate"; schedColor = "text-yellow-500"; }
+      else if (h >= 13 && h <= 15) { label = "Mid-day slow";         schedRating = "🟡 Slow";     schedColor = "text-yellow-500"; }
+      else if (h >= 16 && h <= 18) { label = "Roosting return";      schedRating = "🟢 Good";     schedColor = "text-green-500"; }
+      else if (h >= 19 && h <= 21) { label = "Winding down";         schedRating = "🔴 Low";      schedColor = "text-red-500"; }
+      else                          { label = "Birds roosting";       schedRating = "🔴 None";     schedColor = "text-red-500"; }
+      return { h, label, schedRating, schedColor };
+    });
 
     return {
       temp,
@@ -437,7 +475,9 @@ const MapPage = () => {
       color,
       barColor,
       reasons,
-      tip
+      tip,
+      hour,
+      hourlySchedule,
     };
   }, [weatherData]);
 
@@ -1566,16 +1606,29 @@ const MapPage = () => {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="w-72 bg-card/95 backdrop-blur-md rounded-2xl shadow-xl border border-border p-4 text-left space-y-3"
+                  className="w-72 bg-card/95 backdrop-blur-md rounded-2xl shadow-xl border border-border p-4 text-left space-y-3 max-h-[80vh] overflow-y-auto"
                 >
                   <div className="flex items-center justify-between border-b border-border pb-2">
-                    <span className="font-bold text-sm">Weather Info</span>
+                    <span className="font-bold text-sm">Birdwatching Conditions</span>
                     <button
                       onClick={() => setShowWeatherDetails(false)}
                       className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  </div>
+
+                  {/* Current time + status */}
+                  <div className="bg-primary/8 border border-primary/15 rounded-xl px-3 py-2.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Right now</p>
+                      <p className="text-sm font-bold">
+                        {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${weatherAnalysis.color}`}>
+                      {weatherAnalysis.rating}
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -1628,6 +1681,37 @@ const MapPage = () => {
                       </ul>
                     )}
                   </div>
+
+                  {/* 24-hour timetable */}
+                  <div className="border-t border-border pt-3">
+                    <p className="text-[11px] font-bold mb-2 text-foreground">24-Hour Schedule</p>
+                    <div className="space-y-0.5 max-h-52 overflow-y-auto pr-1">
+                      {weatherAnalysis.hourlySchedule.map(({ h, label, schedRating, schedColor }) => {
+                        const isCurrent = h === weatherAnalysis.hour;
+                        const fmt = (hr: number) =>
+                          `${String(hr).padStart(2, "0")}:00 – ${String(hr + 1).padStart(2, "0")}:00`;
+                        return (
+                          <div
+                            key={h}
+                            className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[10px] ${
+                              isCurrent
+                                ? "bg-primary/15 border border-primary/30 font-bold"
+                                : "hover:bg-muted/40"
+                            }`}
+                          >
+                            <span className={`font-mono ${isCurrent ? "text-primary" : "text-muted-foreground"}`}>
+                              {fmt(h)}{isCurrent ? " ← now" : ""}
+                            </span>
+                            <div className="flex flex-col items-end gap-0">
+                              <span className={`${schedColor} font-semibold`}>{schedRating}</span>
+                              <span className="text-muted-foreground text-[9px]">{label}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                 </motion.div>
               )}
             </AnimatePresence>
