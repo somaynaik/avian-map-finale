@@ -1211,14 +1211,17 @@ const MapPage = () => {
     <div className="relative h-screen flex">
       {/* Sidebar */}
       <AnimatePresence>
-        {showSidebar && (
+        {(showSidebar || !isMobile) && (
           <motion.div
             initial={isMobile ? { y: "100%", x: 0 } : { x: -320, y: 0 }}
             animate={{ x: 0, y: 0 }}
             exit={isMobile ? { y: "100%", x: 0 } : { x: -320, y: 0 }}
             transition={{ type: "spring", damping: 25 }}
-            className={`absolute bottom-[var(--nav-height)] left-0 right-0 md:right-auto md:top-0 md:bottom-0 w-full md:w-80 bg-card/95 backdrop-blur-lg border-t md:border-t-0 md:border-r border-border z-30 flex flex-col rounded-t-3xl md:rounded-none shadow-[0_-8px_30px_rgba(0,0,0,0.12)] md:shadow-none transition-all duration-300 ${isMobile && isSidebarMinimized ? "h-[70px] overflow-hidden" : "h-[45vh]"
-              }`}
+            className={`absolute left-0 z-30 flex flex-col bg-card/95 backdrop-blur-lg border-border transition-all duration-300
+              md:right-auto md:top-0 md:bottom-0 md:w-96 md:h-full md:border-t-0 md:border-r md:rounded-none md:shadow-none md:overflow-hidden
+              bottom-[var(--nav-height)] right-0 w-full border-t rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)]
+              ${isMobile && isSidebarMinimized ? "h-[70px] overflow-hidden" : isMobile ? "h-[45vh]" : ""}
+            `}
           >
             {/* Pull / drag handle bar for mobile */}
             {isMobile && (
@@ -1264,7 +1267,7 @@ const MapPage = () => {
                       e.stopPropagation();
                       setShowSidebar(false);
                     }}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors"
+                    className="p-1.5 hover:bg-muted rounded-lg transition-colors md:hidden"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -1528,8 +1531,8 @@ const MapPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Toggle Sidebar Button */}
-      {!showSidebar && (
+      {/* Toggle Sidebar Button - mobile only */}
+      {!showSidebar && isMobile && (
         <button
           onClick={() => setShowSidebar(true)}
           className="absolute left-4 top-20 z-20 w-12 h-12 rounded-full bg-card/90 backdrop-blur-lg shadow-lg border border-border flex items-center justify-center hover:scale-110 transition-transform"
