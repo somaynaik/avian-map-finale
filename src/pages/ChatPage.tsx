@@ -229,22 +229,56 @@ const ChatPage = () => {
             parts: [{ text: m.body }]
           }));
 
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              contents: formattedHistory,
-              systemInstruction: {
-                parts: [{ text: "You are Peregrine, a helpful birdwatching chatbot assistant. Help the user identify birds, give facts about species, explain nesting habits, and suggest birding spots in India. Keep answers engaging, highly informative, and concise." }]
-              }
-            })
-          });
+          let response = null;
+          let lastError = null;
+          const modelsToTry = [
+            "gemini-3.5-flash",
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash"
+          ];
 
-          if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData?.error?.message || `API error (${response.status})`);
+          for (const model of modelsToTry) {
+            try {
+              const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  contents: formattedHistory,
+                  systemInstruction: {
+                    parts: [{ text: "You are Peregrine, a helpful birdwatching chatbot assistant. Help the user identify birds, give facts about species, explain nesting habits, and suggest birding spots in India. Keep answers engaging, highly informative, and concise." }]
+                  }
+                })
+              });
+
+              if (res.ok) {
+                response = res;
+                break;
+              } else {
+                const errData = await res.json().catch(() => ({}));
+                const errMsg = errData?.error?.message || "";
+                if (res.status === 404 || errMsg.toLowerCase().includes("not found") || errMsg.toLowerCase().includes("no longer available") || errMsg.toLowerCase().includes("deprecated")) {
+                  console.warn(`Model ${model} failed, trying next. Error: ${errMsg}`);
+                  lastError = new Error(errMsg);
+                  continue;
+                } else {
+                  throw new Error(errMsg || `API error (${res.status})`);
+                }
+              }
+            } catch (e: any) {
+              lastError = e;
+              const msg = e.message || "";
+              if (msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("no longer available") || msg.toLowerCase().includes("deprecated")) {
+                continue;
+              }
+              throw e;
+            }
+          }
+
+          if (!response) {
+            throw lastError || new Error("All attempted Gemini models failed to generate content.");
           }
 
           const resData = await response.json();
