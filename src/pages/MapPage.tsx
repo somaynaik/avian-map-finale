@@ -1688,7 +1688,7 @@ const MapPage = () => {
                   {/* 24-hour timetable */}
                   <div className="border-t border-border pt-3">
                     <p className="text-[11px] font-bold mb-2 text-foreground">24-Hour Schedule</p>
-                    <div className="space-y-0.5 max-h-52 overflow-y-auto pr-1">
+                    <div className="space-y-0.5 pr-1">
                       {weatherAnalysis.hourlySchedule.map(({ h, label, schedRating, schedColor, note }) => {
                         const isCurrent = h === weatherAnalysis.hour;
                         const fmt = (hr: number) =>
