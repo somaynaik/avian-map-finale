@@ -27,3 +27,18 @@ set username = 'peregrine',
     full_name = 'Peregrine',
     avatar_url = '/peregrine-avatar.jpg',
     bio = 'System birding AI assistant';
+
+-- 3. Update the messages RLS insert policy to allow user clients to insert bot messages in their chats
+drop policy if exists "messages_insert_participant" on public.messages;
+create policy "messages_insert_participant"
+on public.messages for insert
+to authenticated
+with check (
+  (auth.uid() = sender_id or sender_id = '00000000-0000-0000-0000-000000000000')
+  and exists (
+    select 1
+    from public.conversation_participants cp
+    where cp.conversation_id = messages.conversation_id
+      and cp.user_id = auth.uid()
+  )
+);
