@@ -46,6 +46,15 @@ const MessagesPage = () => {
       result = [peregrineBotPreview, ...conversations];
     }
 
+    // Always pin Peregrine to position 0
+    result.sort((a, b) => {
+      const aIsBot = a.other_user?.id === "00000000-0000-0000-0000-000000000000";
+      const bIsBot = b.other_user?.id === "00000000-0000-0000-0000-000000000000";
+      if (aIsBot) return -1;
+      if (bIsBot) return 1;
+      return 0;
+    });
+
     const term = search.trim().toLowerCase();
     if (!term) {
       return result;
@@ -143,7 +152,8 @@ const MessagesPage = () => {
                       {conversation.last_message || "Conversation created"}
                     </p>
                   </div>
-                  {conversation.unread_count > 0 && (
+                  {conversation.unread_count > 0 &&
+                    conversation.other_user?.id !== "00000000-0000-0000-0000-000000000000" && (
                     <div className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
                       {conversation.unread_count}
                     </div>
