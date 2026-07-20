@@ -66,7 +66,7 @@ const FeedPage = () => {
     queryKey: ["notifications", user?.id],
     queryFn: () => listNotifications(user!.id),
     enabled: !!user?.id,
-    refetchInterval: 15000,
+    refetchInterval: 3 * 60 * 1000, // Poll every 3 min (was 15s — caused excessive disk IO)
   });
 
   const unreadCount = lastViewed

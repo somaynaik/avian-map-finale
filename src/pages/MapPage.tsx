@@ -324,14 +324,16 @@ const MapPage = () => {
       return [];
     },
     enabled: selectedRegion !== 'NEARBY' || !!userLocation,
-    refetchInterval: isNavigating ? false : 5 * 60 * 1000,
+    refetchInterval: isNavigating ? false : 10 * 60 * 1000, // 10 min (eBird data doesn't change rapidly)
+    staleTime: 5 * 60 * 1000, // treat as fresh for 5 min so GPS jitter doesn't re-fetch
   });
 
   // Fetch community geo-tagged posts (< 48 hrs old)
   const { data: communityPosts = [] } = useQuery({
     queryKey: ['community-map-posts'],
     queryFn: () => getRecentGeoTaggedPosts(48),
-    refetchInterval: isNavigating ? false : 2 * 60 * 1000, // refresh every 2 min
+    refetchInterval: isNavigating ? false : 10 * 60 * 1000, // 10 min (was 2 min — caused excessive disk IO)
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch current weather updates via Open-Meteo
