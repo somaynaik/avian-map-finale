@@ -1814,7 +1814,7 @@ const MapPage = () => {
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 flex items-center gap-1.5 shadow-md hover:scale-105 transition-transform"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" className="rotate-45"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-45"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
                 Start Navigation
               </Button>
             </div>

@@ -13,9 +13,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getDistanceKm, readImageExif, type ExifMetadata } from "@/lib/exif";
 import { createPost, uploadPostImage, listUsers, getInitials } from "@/lib/social";
 
 const CLASSIFIER_URL = import.meta.env.VITE_BIRDSCANNER_URL || "http://localhost:5000";
+const EXIF_LOCATION_MISMATCH_KM = 25;
 
 const loadScript = (src: string): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -122,6 +124,8 @@ const CameraPage = () => {
   const [pinLocation, setPinLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
+  const [exifMetadata, setExifMetadata] = useState<ExifMetadata | null>(null);
+  const [exifError, setExifError] = useState<string | null>(null);
 
   const { data: allUsers = [] } = useQuery({
     queryKey: ["all-users-to-tag", user?.id],
@@ -139,6 +143,7 @@ const CameraPage = () => {
   const miniMapRef = useRef<maplibregl.Map | null>(null);
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
   const currentStyleRef = useRef<string>("");
+  const exifAutofillAppliedRef = useRef(false);
 
   useEffect(() => {
     if (!imageFile) {
@@ -161,6 +166,13 @@ const CameraPage = () => {
     setVideoPreview(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [videoFile]);
+
+  useEffect(() => {
+    if (!exifMetadata?.location || exifAutofillAppliedRef.current) return;
+
+    setPinLocation((current) => current ?? exifMetadata.location);
+    exifAutofillAppliedRef.current = true;
+  }, [exifMetadata]);
 
   useEffect(() => {
     preloadModel().catch((err) => console.error("Error preloading MobileNet model:", err));
@@ -213,7 +225,7 @@ const CameraPage = () => {
         border: 3px solid white;
       ">
         <div style="transform: rotate(45deg); display: flex; align-items: center; justify-content: center; color: white;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M16 7h.01" />
             <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20" />
             <path d="m20 7 2 .5-2 .5" />
@@ -402,6 +414,15 @@ const CameraPage = () => {
         throw new Error("Upload an image, video, or record audio before posting.");
       }
 
+      if (imageFile && exifMetadata?.location && pinLocation) {
+        const mismatchKm = getDistanceKm(exifMetadata.location, pinLocation);
+        if (mismatchKm > EXIF_LOCATION_MISMATCH_KM) {
+          throw new Error(
+            `Photo EXIF location is ${mismatchKm.toFixed(0)} km away from the selected map pin. Use the photo location or choose a matching image.`,
+          );
+        }
+      }
+
       // If only audio is provided, use a default image since image_url is required by the DB
       let imageUrl = "/avian-map-final-logo.jpeg";
       if (imageFile) {
@@ -450,7 +471,26 @@ const CameraPage = () => {
     setVideoFile(null);
     setImageFile(file);
     setPredictedSpecies(null);
+    setExifMetadata(null);
+    setExifError(null);
+    exifAutofillAppliedRef.current = false;
     classifyMutation.mutate(file);
+
+    readImageExif(file)
+      .then((metadata) => {
+        setExifMetadata(metadata);
+
+        if (!metadata.location) return;
+
+        toast({
+          title: "Photo metadata found",
+          description: "Using the image's embedded GPS as the default sighting location.",
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to parse EXIF metadata:", error);
+        setExifError("Could not read photo metadata. Location will rely on the map pin.");
+      });
   };
 
   const handleVideoChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -526,7 +566,13 @@ const CameraPage = () => {
     setPredictedSpecies(null);
     setSpeciesName("");
     setTaggedUserIds([]);
+    setExifMetadata(null);
+    setExifError(null);
+    exifAutofillAppliedRef.current = false;
   };
+
+  const exifMismatchKm =
+    exifMetadata?.location && pinLocation ? getDistanceKm(exifMetadata.location, pinLocation) : null;
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -794,6 +840,45 @@ const CameraPage = () => {
             </div>
           )}
         </div>
+
+        {imageFile && (exifMetadata?.location || exifMetadata?.capturedAt || exifError) && (
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+            <div>
+              <p className="text-sm font-semibold">Photo metadata check</p>
+              <p className="text-xs text-muted-foreground">
+                EXIF helps catch photos taken somewhere else and uploaded with a different pin.
+              </p>
+            </div>
+
+            {exifMetadata?.capturedAt && (
+              <p className="text-sm text-muted-foreground">Captured at: {exifMetadata.capturedAt}</p>
+            )}
+
+            {exifMetadata?.location ? (
+              <>
+                <p className="text-sm">
+                  Photo GPS: {exifMetadata.location.lat.toFixed(5)}, {exifMetadata.location.lng.toFixed(5)}
+                </p>
+                {exifMismatchKm != null && (
+                  <p
+                    className={`text-sm ${
+                      exifMismatchKm > EXIF_LOCATION_MISMATCH_KM ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    Pin mismatch: {exifMismatchKm.toFixed(1)} km
+                    {exifMismatchKm > EXIF_LOCATION_MISMATCH_KM
+                      ? ". Posting is blocked until the map pin matches the photo metadata."
+                      : ""}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No GPS metadata found in this image.</p>
+            )}
+
+            {exifError && <p className="text-sm text-muted-foreground">{exifError}</p>}
+          </div>
+        )}
 
         {/* Form fields */}
         <div className="space-y-2">

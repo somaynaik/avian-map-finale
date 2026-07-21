@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical, Volume2, VolumeX, Search } from "lucide-react";
+import { Heart, Loader2, MapPin, MessageCircle, Share2, Send, Play, X, Bell, MoreVertical, Volume2, VolumeX, Search, ThumbsDown, ThumbsUp } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { motion, AnimatePresence } from "framer-motion";
@@ -25,6 +25,7 @@ import {
   getInitials,
   listFeedPosts,
   togglePostLike,
+  setPostConfirmation,
   listPostComments,
   createPostComment,
   listNotifications,
@@ -40,6 +41,47 @@ const isVideoUrl = (url?: string) => {
   if (!url) return false;
   const lower = url.toLowerCase();
   return lower.includes(".mp4") || lower.includes(".mov") || lower.includes(".webm") || lower.includes("video");
+};
+
+const getConfirmationLabel = (post: FeedPost) => {
+  switch (post.confirmation_status) {
+    case "confirmed":
+      return "Community confirmed";
+    case "disputed":
+      return "Disputed sighting";
+    case "mixed":
+      return "Mixed confirmation";
+    default:
+      return "Needs confirmation";
+  }
+};
+
+const getNextConfirmationState = (
+  current: Pick<FeedPost, "confirmations_yes" | "confirmations_no" | "my_confirmation">,
+  nextVote: "yes" | "no" | null,
+) => {
+  let yes = current.confirmations_yes;
+  let no = current.confirmations_no;
+
+  if (current.my_confirmation === "yes") yes -= 1;
+  if (current.my_confirmation === "no") no -= 1;
+  if (nextVote === "yes") yes += 1;
+  if (nextVote === "no") no += 1;
+
+  return {
+    confirmations_yes: yes,
+    confirmations_no: no,
+    my_confirmation: nextVote,
+    confirmation_score: yes - no,
+    confirmation_status:
+      yes + no === 0
+        ? ("unrated" as const)
+        : yes > no
+          ? ("confirmed" as const)
+          : no > yes
+            ? ("disputed" as const)
+            : ("mixed" as const),
+  };
 };
 
 const FeedPage = () => {
@@ -622,6 +664,13 @@ export const FeedCard = ({
   const isAuthor = user?.id === post.author_id;
   const authorName = post.author?.full_name || post.author?.username || "Unknown birder";
   const [showComments, setShowComments] = useState(false);
+  const [confirmationState, setConfirmationState] = useState(() => ({
+    confirmations_yes: post.confirmations_yes,
+    confirmations_no: post.confirmations_no,
+    confirmation_score: post.confirmation_score,
+    confirmation_status: post.confirmation_status,
+    my_confirmation: post.my_confirmation,
+  }));
 
   const [isEditing, setIsEditing] = useState(false);
   const [editSpecies, setEditSpecies] = useState(post.species_name);
@@ -644,6 +693,22 @@ export const FeedCard = ({
     const username = (u.username || "").toLowerCase();
     return fullName.includes(search) || username.includes(search);
   });
+
+  useEffect(() => {
+    setConfirmationState({
+      confirmations_yes: post.confirmations_yes,
+      confirmations_no: post.confirmations_no,
+      confirmation_score: post.confirmation_score,
+      confirmation_status: post.confirmation_status,
+      my_confirmation: post.my_confirmation,
+    });
+  }, [
+    post.confirmations_yes,
+    post.confirmations_no,
+    post.confirmation_score,
+    post.confirmation_status,
+    post.my_confirmation,
+  ]);
 
   const deleteMutation = useMutation({
     mutationFn: () => deletePost(post.id),
@@ -693,8 +758,29 @@ export const FeedCard = ({
     },
   });
 
+  const confirmationMutation = useMutation({
+    mutationFn: (vote: "yes" | "no" | null) => setPostConfirmation(post.id, user!.id, vote),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["post-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile-tagged-posts"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update confirmation",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const isFallbackImage = post.image_url.includes("avian-map-final-logo");
   const showLocationMap = isFallbackImage && post.latitude != null && post.longitude != null;
+  const confirmationLabel = getConfirmationLabel({ ...post, ...confirmationState });
+  const canConfirm = !isAuthor;
 
   return (
     <motion.article
@@ -816,6 +902,62 @@ export const FeedCard = ({
           >
             <Share2 className="h-4 w-4" />
           </button>
+        </div>
+
+        <div className="rounded-2xl border border-border/80 bg-muted/30 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">Can you confirm this sighting?</p>
+              <p className="text-[11px] text-muted-foreground">
+                {confirmationLabel} • Score {confirmationState.confirmation_score > 0 ? `+${confirmationState.confirmation_score}` : confirmationState.confirmation_score}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={confirmationMutation.isPending || !canConfirm}
+                onClick={() => {
+                  if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else if (!user) {
+                return;
+              } else {
+                    confirmationMutation.mutate(confirmationState.my_confirmation === "yes" ? null : "yes");
+                  }
+                }}
+                className={`h-8 rounded-full px-3 text-xs ${confirmationState.my_confirmation === "yes" ? "border-primary bg-primary/10 text-primary" : ""}`}
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+                <span>{confirmationState.confirmations_yes}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={confirmationMutation.isPending || !canConfirm}
+                onClick={() => {
+                  if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else if (!user) {
+                return;
+              } else {
+                    confirmationMutation.mutate(confirmationState.my_confirmation === "no" ? null : "no");
+                  }
+                }}
+                className={`h-8 rounded-full px-3 text-xs ${confirmationState.my_confirmation === "no" ? "border-destructive/60 bg-destructive/10 text-destructive" : ""}`}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+                <span>{confirmationState.confirmations_no}</span>
+              </Button>
+            </div>
+          </div>
+          {!canConfirm && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {isAuthor ? "Authors cannot rate their own sighting." : "Log in to rate this sighting."}
+            </p>
+          )}
         </div>
 
         {post.note && <p className="text-sm leading-6">{post.note}</p>}
@@ -1011,6 +1153,13 @@ export const VideoCard = ({
   const isAuthor = user?.id === video.author_id;
   const authorName = video.author?.full_name || video.author?.username || "Unknown birder";
   const [showComments, setShowComments] = useState(false);
+  const [confirmationState, setConfirmationState] = useState(() => ({
+    confirmations_yes: video.confirmations_yes,
+    confirmations_no: video.confirmations_no,
+    confirmation_score: video.confirmation_score,
+    confirmation_status: video.confirmation_status,
+    my_confirmation: video.my_confirmation,
+  }));
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -1149,6 +1298,28 @@ export const VideoCard = ({
       });
     },
   });
+
+  const confirmationMutation = useMutation({
+    mutationFn: (vote: "yes" | "no" | null) => setPostConfirmation(video.id, user!.id, vote),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+      queryClient.invalidateQueries({ queryKey: ["post-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-tagged-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile-tagged-posts"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not update confirmation",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmationLabel = getConfirmationLabel({ ...video, ...confirmationState });
+  const canConfirm = !isAuthor;
 
   return (
     <div className="snap-start shrink-0 h-full w-full relative flex items-center justify-center bg-black overflow-hidden rounded-2xl border border-border">
@@ -1335,6 +1506,59 @@ export const VideoCard = ({
               </span>
             ))}
           </div>
+        )}
+
+        <div className="mt-1 inline-flex w-fit items-center rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium backdrop-blur-sm">
+          {confirmationLabel} • Score {confirmationState.confirmation_score > 0 ? `+${confirmationState.confirmation_score}` : confirmationState.confirmation_score}
+        </div>
+        <div className="flex w-fit items-center gap-2 rounded-2xl bg-black/30 px-2 py-2 backdrop-blur-sm">
+          <button
+            onClick={() => {
+              if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else if (!user) {
+                return;
+              } else {
+                confirmationMutation.mutate(confirmationState.my_confirmation === "yes" ? null : "yes");
+              }
+            }}
+            disabled={confirmationMutation.isPending || !canConfirm}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+              confirmationState.my_confirmation === "yes"
+                ? "bg-primary text-primary-foreground"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            <ThumbsUp className="h-3.5 w-3.5" />
+            <span>Yes</span>
+            <span>{confirmationState.confirmations_yes}</span>
+          </button>
+          <button
+            onClick={() => {
+              if (onInteractionIntercept) {
+                onInteractionIntercept();
+              } else if (!user) {
+                return;
+              } else {
+                confirmationMutation.mutate(confirmationState.my_confirmation === "no" ? null : "no");
+              }
+            }}
+            disabled={confirmationMutation.isPending || !canConfirm}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+              confirmationState.my_confirmation === "no"
+                ? "bg-destructive text-destructive-foreground"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            <ThumbsDown className="h-3.5 w-3.5" />
+            <span>No</span>
+            <span>{confirmationState.confirmations_no}</span>
+          </button>
+        </div>
+        {!canConfirm && (
+          <p className="text-[11px] opacity-80">
+            {isAuthor ? "Authors cannot rate their own sighting." : "Log in to rate this sighting."}
+          </p>
         )}
       </div>
 

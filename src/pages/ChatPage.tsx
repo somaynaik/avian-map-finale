@@ -401,7 +401,6 @@ const ChatPage = () => {
     if (!selectedConversationId) return;
     try {
       await clearConversationMessages(selectedConversationId);
-      setLocalMessages([]);
       queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
       queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
       toast({

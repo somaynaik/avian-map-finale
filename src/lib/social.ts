@@ -40,6 +40,11 @@ export type FeedPost = Post & {
   author: Profile | null;
   likes_count: number;
   liked_by_me: boolean;
+  confirmations_yes: number;
+  confirmations_no: number;
+  confirmation_score: number;
+  confirmation_status: "confirmed" | "mixed" | "disputed" | "unrated";
+  my_confirmation: "yes" | "no" | null;
   tagged_profiles?: Profile[];
 };
 
@@ -259,8 +264,8 @@ export async function createPost(input: {
   return data as Post;
 }
 
-export async function hydrateFeedPosts(posts: Post[], currentUserId: string) {
-  if (!posts.length) return [] as FeedPost[];
+export async function hydrateFeedPosts(posts: Post[], currentUserId: string): Promise<FeedPost[]> {
+  if (!posts.length) return [];
 
   const authorIds = [...new Set(posts.map((post) => post.author_id))];
   const postIds = posts.map((post) => post.id);
@@ -283,10 +288,12 @@ export async function hydrateFeedPosts(posts: Post[], currentUserId: string) {
   const [
     { data: profiles },
     { data: likes },
+    { data: confirmations },
     { data: taggedProfiles }
   ] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
     supabase.from("post_likes").select("post_id,user_id").in("post_id", postIds),
+    supabase.from("post_confirmations").select("post_id,user_id,vote").in("post_id", postIds),
     allTaggedIds.length > 0
       ? supabase.from("profiles").select("*").in("id", allTaggedIds)
       : Promise.resolve({ data: [] })
@@ -295,6 +302,7 @@ export async function hydrateFeedPosts(posts: Post[], currentUserId: string) {
   const profileById = new Map((profiles || []).map((p) => [p.id, p as Profile]));
   const taggedProfileById = new Map((taggedProfiles || []).map((p) => [p.id, p as Profile]));
   const likesByPost = new Map<string, Array<{ user_id: string }>>();
+  const confirmationsByPost = new Map<string, Array<{ user_id: string; vote: "yes" | "no" }>>();
 
   for (const like of (likes || []) as { post_id: string; user_id: string }[]) {
     const existing = likesByPost.get(like.post_id) || [];
@@ -302,8 +310,18 @@ export async function hydrateFeedPosts(posts: Post[], currentUserId: string) {
     likesByPost.set(like.post_id, existing);
   }
 
+  for (const confirmation of (confirmations || []) as { post_id: string; user_id: string; vote: "yes" | "no" }[]) {
+    const existing = confirmationsByPost.get(confirmation.post_id) || [];
+    existing.push({ user_id: confirmation.user_id, vote: confirmation.vote });
+    confirmationsByPost.set(confirmation.post_id, existing);
+  }
+
   return posts.map((post) => {
     const postLikes = likesByPost.get(post.id) || [];
+    const postConfirmations = confirmationsByPost.get(post.id) || [];
+    const confirmationsYes = postConfirmations.filter((entry) => entry.vote === "yes").length;
+    const confirmationsNo = postConfirmations.filter((entry) => entry.vote === "no").length;
+    const confirmationScore = confirmationsYes - confirmationsNo;
     let noteText = post.note || "";
     let taggedList: Profile[] = [];
 
@@ -328,6 +346,18 @@ export async function hydrateFeedPosts(posts: Post[], currentUserId: string) {
       author: profileById.get(post.author_id) || null,
       likes_count: postLikes.length,
       liked_by_me: postLikes.some((like) => like.user_id === currentUserId),
+      confirmations_yes: confirmationsYes,
+      confirmations_no: confirmationsNo,
+      confirmation_score: confirmationScore,
+      confirmation_status:
+        postConfirmations.length === 0
+          ? "unrated"
+          : confirmationsYes > confirmationsNo
+            ? "confirmed"
+            : confirmationsNo > confirmationsYes
+              ? "disputed"
+              : "mixed",
+      my_confirmation: postConfirmations.find((entry) => entry.user_id === currentUserId)?.vote || null,
       tagged_profiles: taggedList,
     };
   });
@@ -392,6 +422,45 @@ export async function togglePostLike(postId: string, userId: string, liked: bool
   }
 
   const { error } = await supabase.from("post_likes").insert({ post_id: postId, user_id: userId });
+  if (error) throw error;
+}
+
+export async function setPostConfirmation(
+  postId: string,
+  userId: string,
+  vote: "yes" | "no" | null,
+) {
+  const { data: post, error: postError } = await supabase
+    .from("posts")
+    .select("author_id")
+    .eq("id", postId)
+    .single();
+
+  if (postError) throw postError;
+  if (post.author_id === userId) {
+    throw new Error("You cannot confirm your own sighting.");
+  }
+
+  if (vote === null) {
+    const { error } = await supabase
+      .from("post_confirmations")
+      .delete()
+      .eq("post_id", postId)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from("post_confirmations").upsert(
+    {
+      post_id: postId,
+      user_id: userId,
+      vote,
+    },
+    { onConflict: "post_id,user_id" },
+  );
+
   if (error) throw error;
 }
 

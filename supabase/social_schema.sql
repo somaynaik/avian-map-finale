@@ -28,6 +28,14 @@ create table if not exists public.post_likes (
   primary key (post_id, user_id)
 );
 
+create table if not exists public.post_confirmations (
+  post_id uuid not null references public.posts (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  vote text not null check (vote in ('yes', 'no')),
+  created_at timestamptz not null default timezone('utc', now()),
+  primary key (post_id, user_id)
+);
+
 create table if not exists public.follows (
   follower_id uuid not null references public.profiles (id) on delete cascade,
   following_id uuid not null references public.profiles (id) on delete cascade,
@@ -125,6 +133,7 @@ for each row execute procedure public.handle_new_user();
 alter table public.profiles enable row level security;
 alter table public.posts enable row level security;
 alter table public.post_likes enable row level security;
+alter table public.post_confirmations enable row level security;
 alter table public.follows enable row level security;
 alter table public.conversations enable row level security;
 alter table public.conversation_participants enable row level security;
@@ -193,6 +202,46 @@ with check (auth.uid() = user_id);
 drop policy if exists "post_likes_delete_own" on public.post_likes;
 create policy "post_likes_delete_own"
 on public.post_likes for delete
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "post_confirmations_select_all" on public.post_confirmations;
+create policy "post_confirmations_select_all"
+on public.post_confirmations for select
+using (true);
+
+drop policy if exists "post_confirmations_insert_own" on public.post_confirmations;
+create policy "post_confirmations_insert_own"
+on public.post_confirmations for insert
+to authenticated
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.posts p
+    where p.id = post_confirmations.post_id
+      and p.author_id <> auth.uid()
+  )
+);
+
+drop policy if exists "post_confirmations_update_own" on public.post_confirmations;
+create policy "post_confirmations_update_own"
+on public.post_confirmations for update
+to authenticated
+using (auth.uid() = user_id)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.posts p
+    where p.id = post_confirmations.post_id
+      and p.author_id <> auth.uid()
+  )
+);
+
+drop policy if exists "post_confirmations_delete_own" on public.post_confirmations;
+create policy "post_confirmations_delete_own"
+on public.post_confirmations for delete
 to authenticated
 using (auth.uid() = user_id);
 
@@ -311,6 +360,8 @@ CREATE INDEX IF NOT EXISTS idx_posts_author_id ON public.posts (author_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON public.posts (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON public.post_likes (post_id);
 CREATE INDEX IF NOT EXISTS idx_post_likes_user_id ON public.post_likes (user_id);
+CREATE INDEX IF NOT EXISTS idx_post_confirmations_post_id ON public.post_confirmations (post_id);
+CREATE INDEX IF NOT EXISTS idx_post_confirmations_user_id ON public.post_confirmations (user_id);
 CREATE INDEX IF NOT EXISTS idx_follows_follower_id ON public.follows (follower_id);
 CREATE INDEX IF NOT EXISTS idx_follows_following_id ON public.follows (following_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_conv_id ON public.conversation_participants (conversation_id);
