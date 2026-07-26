@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from "react";
+import { useLocation as useRouterLocation } from "react-router-dom";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapPage.css";
-import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users, ExternalLink, Volume2, VolumeX } from "lucide-react";
+import { Search, SlidersHorizontal, Locate, Loader2, X, MapPin, Clock, ChevronDown, Check, Users, ExternalLink, Volume2, VolumeX, CalendarDays } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Geolocation } from "@capacitor/geolocation";
 import { Capacitor } from "@capacitor/core";
@@ -173,9 +174,66 @@ const MapPage = () => {
     isCommunity?: boolean;
     imageUrl?: string;
     authorName?: string;
+    isEvent?: boolean;
+    eventDate?: string;
   }) | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [showWeatherDetails, setShowWeatherDetails] = useState(false);
+
+  // Read event destination passed via router state (from EventDetailPage)
+  const routerLocation = useRouterLocation();
+  const eventMarkerRef = useRef<maplibregl.Marker | null>(null);
+
+  useEffect(() => {
+    const dest = (routerLocation.state as any)?.eventDestination;
+    if (!dest?.lat || !dest?.lng) return;
+
+    // Pre-select the event as destination — identical shape to bird sighting
+    setSelectedSighting({
+      speciesCode: "event",
+      comName: dest.title,
+      sciName: "",
+      locId: `event-${dest.lat}-${dest.lng}`,
+      locName: dest.locationName || dest.title,
+      obsDt: dest.eventDate || new Date().toISOString(),
+      howMany: 0,
+      lat: dest.lat,
+      lng: dest.lng,
+      obsValid: true,
+      obsReviewed: true,
+      locationPrivate: false,
+      isEvent: true,
+      eventDate: dest.eventDate,
+    });
+
+    // Fly to the event location
+    if (map.current) {
+      map.current.flyTo({ center: [dest.lng, dest.lat], zoom: 14, duration: 1500 });
+    }
+
+    // Drop a red event pin on the map
+    if (eventMarkerRef.current) {
+      eventMarkerRef.current.remove();
+    }
+    if (map.current) {
+      const el = document.createElement("div");
+      el.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:38px;height:38px;background:#dc2626;border-radius:50% 50% 50% 0;
+            transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
+            box-shadow:0 4px 14px rgba(220,38,38,0.5);border:3px solid white;">
+            <span style="transform:rotate(45deg);font-size:18px;">📅</span>
+          </div>
+          <div style="width:8px;height:8px;background:rgba(220,38,38,0.3);border-radius:50%;margin-top:2px;"></div>
+        </div>`;
+      eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([dest.lng, dest.lat])
+        .addTo(map.current);
+    }
+
+    // Clear state so navigating away and back doesn't re-trigger
+    window.history.replaceState({}, "");
+  }, [routerLocation.state]); // eslint-disable-line
 
   // Active Navigation Guidance States
   const [isNavigating, setIsNavigating] = useState(false);
@@ -547,6 +605,29 @@ const MapPage = () => {
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    // After map loads, check if an event destination was passed before map was ready
+    map.current.once("load", () => {
+      const dest = (routerLocation.state as any)?.eventDestination;
+      if (dest?.lat && dest?.lng && map.current) {
+        map.current.flyTo({ center: [dest.lng, dest.lat], zoom: 14, duration: 1500 });
+        // Drop red event marker
+        if (eventMarkerRef.current) eventMarkerRef.current.remove();
+        const el = document.createElement("div");
+        el.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div style="width:38px;height:38px;background:#dc2626;border-radius:50% 50% 50% 0;
+              transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
+              box-shadow:0 4px 14px rgba(220,38,38,0.5);border:3px solid white;">
+              <span style="transform:rotate(45deg);font-size:18px;">📅</span>
+            </div>
+            <div style="width:8px;height:8px;background:rgba(220,38,38,0.3);border-radius:50%;margin-top:2px;"></div>
+          </div>`;
+        eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+          .setLngLat([dest.lng, dest.lat])
+          .addTo(map.current);
+      }
+    });
 
     return () => {
       map.current?.remove();
@@ -1745,6 +1826,10 @@ const MapPage = () => {
                     className="h-16 w-16 rounded-xl object-cover shrink-0"
                   />
                 )
+              ) : selectedSighting.isEvent ? (
+                <div className="h-16 w-16 rounded-xl bg-red-100 flex items-center justify-center shrink-0 text-2xl">
+                  📅
+                </div>
               ) : (
                 <BirdImage
                   scientificName={selectedSighting.sciName}
@@ -1753,11 +1838,23 @@ const MapPage = () => {
                 />
               )}
               <div className="flex-1 min-w-0">
-                <span className="inline-block bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">
-                  Selected Destination
+                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2 ${
+                  selectedSighting.isEvent
+                    ? "bg-red-100 text-red-600"
+                    : "bg-primary/10 text-primary"
+                }`}>
+                  {selectedSighting.isEvent ? "Event Destination" : "Selected Destination"}
                 </span>
                 <h3 className="font-semibold text-base text-foreground truncate">{selectedSighting.comName}</h3>
-                {selectedSighting.isCommunity && selectedSighting.authorName ? (
+                {selectedSighting.isEvent && selectedSighting.eventDate ? (
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <CalendarDays className="w-3 h-3" />
+                    {new Date(selectedSighting.eventDate).toLocaleDateString("en-IN", {
+                      weekday: "short", month: "short", day: "numeric",
+                      hour: "2-digit", minute: "2-digit",
+                    })}
+                  </p>
+                ) : selectedSighting.isCommunity && selectedSighting.authorName ? (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     by @{selectedSighting.authorName}
                   </p>
@@ -1786,7 +1883,14 @@ const MapPage = () => {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedSighting(null)}
+                onClick={() => {
+                  setSelectedSighting(null);
+                  // Remove event marker if it was an event destination
+                  if (eventMarkerRef.current) {
+                    eventMarkerRef.current.remove();
+                    eventMarkerRef.current = null;
+                  }
+                }}
                 className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
               >
                 <X className="h-4 w-4" />
@@ -1906,7 +2010,13 @@ const MapPage = () => {
                     onClick={() => {
                       setIsNavigating(false);
                       setHasArrived(false);
+                      setSelectedSighting(null);
                       setCurrentStepIndex(0);
+                      // Remove event marker if present
+                      if (eventMarkerRef.current) {
+                        eventMarkerRef.current.remove();
+                        eventMarkerRef.current = null;
+                      }
                       // Reset map pitch
                       if (map.current) {
                         map.current.easeTo({

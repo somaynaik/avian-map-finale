@@ -16,6 +16,9 @@ import CameraPage from "./pages/CameraPage";
 import MessagesPage from "./pages/MessagesPage";
 import ChatPage from "./pages/ChatPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import EventsPage from "./pages/EventsPage";
+import CreateEventPage from "./pages/CreateEventPage";
+import EventDetailPage from "./pages/EventDetailPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import PostDetailPage from "./pages/PostDetailPage";
@@ -47,6 +50,9 @@ const App = () => (
             <Route path="/messages" element={<ProtectedRoute><AppLayout><MessagesPage /></AppLayout></ProtectedRoute>} />
             <Route path="/messages/:userId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><AppLayout><DashboardPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/events" element={<ProtectedRoute><AppLayout><EventsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/events/create" element={<ProtectedRoute><CreateEventPage /></ProtectedRoute>} />
+            <Route path="/events/:eventId" element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
             <Route path="/users/:userId" element={<ProtectedRoute><AppLayout><UserProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>} />
             <Route path="/posts/:postId" element={<PostDetailPage />} />
