@@ -314,6 +314,18 @@ const MapPage = () => {
     let watchId: string;
     const startWatching = async () => {
       try {
+        // Ensure permission on native before watching
+        if (Capacitor.isNativePlatform()) {
+          const { location: status } = await Geolocation.checkPermissions();
+          if (status !== 'granted') {
+            const { location: requested } = await Geolocation.requestPermissions();
+            if (requested !== 'granted') {
+              console.warn('Location permission denied — cannot start navigation tracking');
+              return;
+            }
+          }
+        }
+
         watchId = await Geolocation.watchPosition({
           enableHighAccuracy: true,
           timeout: 10000,
@@ -327,7 +339,7 @@ const MapPage = () => {
             const { latitude, longitude } = position.coords;
             setUserLocation({ lat: latitude, lng: longitude });
 
-            // If navigating, we auto-follow user location on map
+            // Auto-follow user location during navigation
             if (map.current) {
               map.current.easeTo({
                 center: [longitude, latitude],
@@ -564,29 +576,60 @@ const MapPage = () => {
     })).sort((a, b) => b.count - a.count);
   }, [sightings, searchQuery]);
 
+  // Permission-aware location getter — requests permission on Android before calling GPS
+  const getLocationWithPermission = async (): Promise<{ latitude: number; longitude: number } | null> => {
+    try {
+      // On native Android/iOS, check + request permission first
+      if (Capacitor.isNativePlatform()) {
+        const { location: status } = await Geolocation.checkPermissions();
+        if (status === 'denied') {
+          // Already permanently denied — nothing we can do
+          console.warn('Location permission permanently denied');
+          return null;
+        }
+        if (status !== 'granted') {
+          const { location: requested } = await Geolocation.requestPermissions();
+          if (requested !== 'granted') {
+            console.warn('Location permission not granted');
+            return null;
+          }
+        }
+      }
+
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 5000,
+      });
+      return position.coords;
+    } catch (err) {
+      console.error('getLocationWithPermission error:', err);
+      return null;
+    }
+  };
+
   // Autolocate on mount
   useEffect(() => {
     const locate = async () => {
-      try {
-        const position = await Geolocation.getCurrentPosition();
-        const { latitude, longitude } = position.coords;
-        setUserLocation({ lat: latitude, lng: longitude });
+      const coords = await getLocationWithPermission();
+      if (coords) {
+        setUserLocation({ lat: coords.latitude, lng: coords.longitude });
         if (map.current) {
           map.current.flyTo({
-            center: [longitude, latitude],
+            center: [coords.longitude, coords.latitude],
             zoom: 11,
             duration: 2000,
           });
         }
-      } catch (error) {
-        console.error('Error getting location automatically:', error);
+      } else {
+        // No location — fall back from NEARBY to all-India so the map isn't empty
         if (selectedRegion === 'NEARBY') {
           setSelectedRegion('IN');
         }
       }
     };
     locate();
-  }, []);
+  }, []); // eslint-disable-line
 
   // Initialize map centered on India
   useEffect(() => {
@@ -1275,18 +1318,17 @@ const MapPage = () => {
 
   // Center map on user location
   const handleLocate = async () => {
-    try {
-      const position = await Geolocation.getCurrentPosition();
-      const { latitude, longitude } = position.coords;
-      setUserLocation({ lat: latitude, lng: longitude });
+    const coords = await getLocationWithPermission();
+    if (coords) {
+      setUserLocation({ lat: coords.latitude, lng: coords.longitude });
       setSelectedRegion('NEARBY');
       map.current?.flyTo({
-        center: [longitude, latitude],
+        center: [coords.longitude, coords.latitude],
         zoom: 12,
         duration: 2000,
       });
-    } catch (error) {
-      console.error('Error getting location:', error);
+    } else {
+      console.error('Could not get location for handleLocate');
     }
   };
 
