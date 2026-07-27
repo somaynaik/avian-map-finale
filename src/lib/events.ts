@@ -50,40 +50,6 @@ export const EVENT_CATEGORIES: { value: EventCategory; label: string }[] = Objec
   CATEGORY_LABELS
 ).map(([value, label]) => ({ value: value as EventCategory, label }));
 
-// ── SQL to run once in Supabase SQL editor ───────────────────────────────────
-// create table if not exists bird_events (
-//   id uuid primary key default gen_random_uuid(),
-//   creator_id uuid references profiles(id) on delete cascade not null,
-//   title text not null,
-//   description text not null default '',
-//   category text not null default 'other',
-//   location_name text not null default '',
-//   latitude double precision,
-//   longitude double precision,
-//   event_date timestamptz not null,
-//   end_date timestamptz,
-//   max_attendees int,
-//   cover_image_url text,
-//   created_at timestamptz default now()
-// );
-//
-// create table if not exists event_attendees (
-//   event_id uuid references bird_events(id) on delete cascade,
-//   user_id uuid references profiles(id) on delete cascade,
-//   joined_at timestamptz default now(),
-//   primary key (event_id, user_id)
-// );
-//
-// alter table bird_events enable row level security;
-// alter table event_attendees enable row level security;
-// create policy "public read events" on bird_events for select using (true);
-// create policy "auth create events" on bird_events for insert with check (auth.uid() = creator_id);
-// create policy "auth delete own events" on bird_events for delete using (auth.uid() = creator_id);
-// create policy "auth update own events" on bird_events for update using (auth.uid() = creator_id);
-// create policy "public read attendees" on event_attendees for select using (true);
-// create policy "auth join event" on event_attendees for insert with check (auth.uid() = user_id);
-// create policy "auth leave event" on event_attendees for delete using (auth.uid() = user_id);
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function listEvents(currentUserId: string): Promise<BirdEventWithMeta[]> {
   const { data: events, error } = await supabase
@@ -245,8 +211,11 @@ export async function deleteEvent(eventId: string): Promise<void> {
 export async function uploadEventCover(userId: string, file: File): Promise<string> {
   const ext = file.name.split(".").pop();
   const path = `events/${userId}/${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from("post-images").upload(path, file);
+  const { error } = await supabase.storage.from("media").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
   if (error) throw error;
-  const { data } = supabase.storage.from("post-images").getPublicUrl(path);
+  const { data } = supabase.storage.from("media").getPublicUrl(path);
   return data.publicUrl;
 }
